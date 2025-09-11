@@ -1,0 +1,28 @@
+[
+  {
+    "id": "m-api-states",
+    "version": "v0.40.9",
+    "upstream": {
+      "url": "http://management-api:9000"
+    },
+    "match": {
+      "url": "<.*>/states",
+      "methods": [
+        "GET"
+      ]
+    },
+    "authenticators": [
+      {
+        "handler": "cookie_session"
+      }
+    ],
+    "authorizer": {
+      "handler": "allow"
+    },
+    "mutators": [
+      {
+        "handler": "noop"
+      }
+    ]
+  }
+]

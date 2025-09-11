@@ -1,0 +1,211 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: eg
+spec:
+  controllerName: gateway.envoyproxy.io/gatewayclass-controller
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: gateway-cert
+  namespace: envoy-gateway-system
+type: kubernetes.io/tls
+data:
+  tls.crt: CERT
+  tls.key: KEY
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: eg
+  namespace: envoy-gateway-system
+  annotations:
+    gateway.envoyproxy.io/infrastructure-type: Host
+spec:
+  gatewayClassName: eg
+  listeners:
+    - name: http
+      protocol: HTTP
+      port: 8080
+    - name: https
+      protocol: HTTPS
+      port: 8443
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - kind: Secret
+            group: ""
+            name: gateway-cert
+            namespace: envoy-gateway-system
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: backend
+  namespace: envoy-gateway-system
+spec:
+  parentRefs:
+    - name: eg
+      namespace: envoy-gateway-system
+  hostnames:
+    - "FULL_FQDN_HERE"
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: payment-manager-ui
+          port: 8080
+          weight: 1
+          kind: Backend
+          group: gateway.envoyproxy.io
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /api
+      filters:
+        - type: URLRewrite
+          urlRewrite:
+            path:
+              type: ReplacePrefixMatch
+              replacePrefixMatch: ""
+      backendRefs:
+        - name: experience-api
+          port: 3000
+          weight: 1
+          kind: Backend
+          group: gateway.envoyproxy.io
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /management-api
+      filters:
+        - type: URLRewrite
+          urlRewrite:
+            path:
+              type: ReplacePrefixMatch
+              replacePrefixMatch: ""
+      backendRefs:
+        - name: management-api
+          port: 9000
+          weight: 1
+          kind: Backend
+          group: gateway.envoyproxy.io
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /realms
+      backendRefs:
+        - name: keycloak
+          port: 8085
+          weight: 1
+          kind: Backend
+          group: gateway.envoyproxy.io
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /keycloak
+      filters:
+        - type: URLRewrite
+          urlRewrite:
+            path:
+              type: ReplacePrefixMatch
+              replacePrefixMatch: ""
+      backendRefs:
+        - name: keycloak
+          port: 8080
+          weight: 1
+          kind: Backend
+          group: gateway.envoyproxy.io
+---
+# apiVersion: gateway.envoyproxy.io/v1alpha1
+# kind: Backend
+# metadata:
+#   name: test-backend
+# spec:
+#   endpoints:
+#     - ip:
+#         address: 172.31.26.127
+#         port: 8090
+# ---
+# apiVersion: gateway.envoyproxy.io/v1alpha1
+# kind: Backend
+# metadata:
+#   name: mojaloop-testing-toolkit-1
+# spec:
+#   endpoints:
+#     - ip:
+#         address: 172.31.26.127
+#         port: 4040
+# ---
+# apiVersion: gateway.envoyproxy.io/v1alpha1
+# kind: Backend
+# metadata:
+#   name: mojaloop-testing-toolkit-2
+# spec:
+#   endpoints:
+#     - ip:
+#         address: 172.31.26.127
+#         port: 5050
+# ---
+# apiVersion: gateway.envoyproxy.io/v1alpha1
+# kind: Backend
+# metadata:
+#   name: sim-backend-2
+# spec:
+#   endpoints:
+#     - ip:
+#         address: 172.31.26.127
+#         port: 5052
+# ---
+# apiVersion: gateway.envoyproxy.io/v1alpha1
+# kind: Backend
+# metadata:
+#   name: sdk-scheme-adapter
+# spec:
+#   endpoints:
+#     - ip:
+#         address: 172.31.26.127
+#         port: 4000
+# ---
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: Backend
+metadata:
+  name: payment-manager-ui
+spec:
+  endpoints:
+    - fqdn:
+        hostname: frontend.default
+        port: 8080
+---
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: Backend
+metadata:
+  name: experience-api
+spec:
+  endpoints:
+    - fqdn:
+        hostname: experience-api.default
+        port: 3000
+---
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: Backend
+metadata:
+  name: keycloak
+spec:
+  endpoints:
+    - fqdn:
+        hostname: keycloak.default
+        port: 8080
+---
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: Backend
+metadata:
+  name: management-api
+spec:
+  endpoints:
+    - fqdn:
+        hostname: management-api.default
+        port: 9000

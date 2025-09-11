@@ -1,0 +1,8 @@
+docker/vault/tmp
+.env
+.idea/
+core-connector-config.env
+docker/haproxy/certs/*.pem
+docker/certbot/etc
+docker/certbot/certs
+*-IGNORE*

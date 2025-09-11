@@ -1,0 +1,35 @@
+services:
+  certbot:
+    image: certbot/certbot
+    ports:
+      - "80:80"
+    volumes:
+      - ./docker/certbot/etc:/etc/letsencrypt
+    command:
+      - certonly
+      - --standalone
+      - --force-renewal
+      - --email
+      - contact@${PM4ML_DOMAIN}
+      - --agree-tos
+      - --no-eff-email
+      - -d
+      - portal.${PM4ML_DOMAIN}
+
+  cert-combiner:
+    image: alpine:latest
+    volumes:
+      - ./docker/certbot/etc:/etc/letsencrypt
+      - ./docker/certbot/certs:/output
+    command:
+      - sh
+      - -c
+      - |
+        cat /etc/letsencrypt/live/portal.${PM4ML_DOMAIN}/fullchain.pem \
+            /etc/letsencrypt/live/portal.${PM4ML_DOMAIN}/privkey.pem \
+            > /output/portal.pem
+        chmod 644 /output/portal.pem
+        echo "Certificate combined successfully"
+    depends_on:
+      - certbot
+

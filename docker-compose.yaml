@@ -1,0 +1,347 @@
+services:
+  frontend:
+    image: pm4ml/mojaloop-payment-manager-ui:1.20.0
+    environment:
+      - API_BASE_URL=https://portal.${PM4ML_DOMAIN}/api
+      # - LOGOUT_URL=https://portal.${PM4ML_DOMAIN}/auth/realms/pm4ml/protocol/openid-connect/logout
+    # ports:
+    #   - "8081:8080"
+    depends_on:
+      - experience-api
+    profiles:
+      - portal
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:12.0.4
+    environment:
+      - KEYCLOAK_USER=admin
+      - KEYCLOAK_PASSWORD=admin
+      - KEYCLOAK_FRONTEND_URL=https://portal.${PM4ML_DOMAIN}/auth
+      - KEYCLOAK_IMPORT=/tmp/pm4ml-realm.json
+      - DB_VENDOR=h2
+      - PORTAL_USER=${PORTAL_USER:-test}
+      - PORTAL_PASSWORD=${PORTAL_PASSWORD-test}
+    volumes:
+      - ./docker/keycloak/keycloak-realm.json:/tmp/pm4ml-realm.json.template
+      - ./docker/keycloak/replace-portal-user.sh:/usr/local/bin/replace-portal-user.sh
+    ports:
+      - "8080:8080"
+    entrypoint: ["/bin/sh", "-c", "/usr/local/bin/replace-portal-user.sh && /opt/jboss/tools/docker-entrypoint.sh -b 0.0.0.0"]
+    profiles:
+      - portal
+
+  experience-api:
+    image: infitx/mojaloop-payment-manager-experience-api:v3.2.2
+    # ports:
+    #   - "4010:3000"
+    environment:
+      - APP_KEYS={{ CHANGE BEFORE INSTALL e.g. ootu1yoo5geeS7izai4ox1Yae1Eey6ai}}
+      - AUTH_CLIENT_ID=pm4ml-customer-ui
+      - AUTH_CLIENT_SECRET=a857e3d7-ebd4-4451-aabd-bcb480dde1a3
+      - AUTH_DISCOVERY_ENDPOINT=http://keycloak:8080/auth/realms/pm4ml/.well-known/openid-configuration
+      - AUTH_LOGGED_IN_LANDING_URL=https://portal.${PM4ML_DOMAIN}/
+      - AUTH_REDIRECT_NAME=pm4ml-customer-ui
+      - AUTH_REDIRECT_URI=https://portal.${PM4ML_DOMAIN}/api/auth
+      - AUTH_RESOURCE_NAME=pm4ml-customer-ui
+      - AUTH_SCOPES=roles
+      - DFSP_ID=${DFSP_ID}
+      - ENV_ID=1
+      - MANAGEMENT_ENDPOINT=management-api:9000
+      - METRICS_ENDPOINT=prometheus:9090
+      - MOCK_DATA=false
+      - SESSION_REDIS_URL=redis://redis/2
+      - SESSION_SECURE=false
+      - ENABLE_AUTH_CLIENT=true
+      - CACHE_SYNC_INTERVAL_SECONDS=30
+      - CACHE_REDIS_URL=redis://redis:6379/0
+      - ENABLE_CORS=TRUE
+    depends_on:
+      - management-api
+      - redis
+    #      - keycloak
+    profiles:
+      - portal
+
+  management-api:
+    image: pm4ml/mojaloop-payment-manager-management-api:6.9.0
+    environment:
+      - AUTH_ENABLED=true
+      - CACHE_SYNC_INTERVAL_SECONDS=30
+      - CACHE_URL=redis://redis:6379
+      - CONTROL_LISTEN_PORT=4005
+      - CA_CSR_PARAMETERS=/resources/caCSRParameters.json
+      - DFSP_CLIENT_CSR_PARAMETERS=/resources/tlsClientCSRParameters.json
+      - DFSP_SERVER_CSR_PARAMETERS=/resources/tlsServerCSRParameters.json
+      - PRIVATE_KEY_ALGORITHM=rsa
+      - PRIVATE_KEY_LENGTH=4096
+      - VAULT_ENDPOINT=http://vault:8233
+      - ENABLE_CORS=true
+      - VAULT_AUTH_METHOD=APP_ROLE
+      - VAULT_ROLE_ID_FILE=/vault/role-id
+      - VAULT_ROLE_SECRET_ID_FILE=/vault/secret-id
+      - VAULT_PKI_CLIENT_ROLE=client-cert-role
+      - VAULT_PKI_SERVER_ROLE=server-cert-role
+      - VAULT_MOUNT_PKI=pki
+      - VAULT_MOUNT_KV=secrets
+      - CERT_MANAGER_ENABLED=false
+      - AUTH_CLIENT_ID=${AUTH_CLIENT_ID}
+      - AUTH_CLIENT_SECRET=${AUTH_CLIENT_SECRET}
+      - HUB_IAM_PROVIDER_URL=https://keycloak.${SWITCH_DOMAIN}
+      - MOJALOOP_CONNECTOR_FQDN=ml-connect.${PM4ML_DOMAIN}
+      - CALLBACK_URL=https://ml-connect.${PM4ML_DOMAIN}
+      - MCM_SERVER_ENDPOINT=https://mcm.${SWITCH_DOMAIN}/pm4mlapi
+      - WHITELIST_IP=${WHITELIST_IP}
+    env_file: ./.env
+    volumes:
+      - ./docker/vault/tmp:/vault
+      - ./docker/management-api/resources:/resources
+    ports:
+      # - "9000:9000"
+      - "9050:9050"
+    depends_on:
+      redis:
+        condition: service_started
+      #      keycloak:
+      #        condition: service_started
+      init-vault:
+        condition: service_completed_successfully
+
+  prometheus:
+    image: prom/prometheus:v2.21.0
+    volumes:
+      - ./docker/prometheus.yml:/etc/prometheus/prometheus.yml
+    profiles:
+      - portal
+
+  ttk-backend:
+    image: mojaloop/ml-testing-toolkit:v18.15.1
+    volumes:
+      - "./docker/testing-toolkit/docker-compose/as-a-backend/spec_files:/opt/app/spec_files"
+    ports:
+      - "5050:5050"
+    command:
+      - sh
+      - -c
+      - "npm start"
+    profiles:
+      - ttk
+
+  ttk-frontend:
+    image: mojaloop/ml-testing-toolkit-ui:v16.7.3
+    ports:
+      - "6060:6060"
+    environment:
+      # - API_BASE_URL=https://ttk.${PM4ML_DOMAIN}
+      - AUTH_ENABLED=FALSE
+    command:
+      - sh
+      - /usr/share/nginx/start.sh
+    profiles:
+      - ttk
+
+  core-connector:
+    image: ${CORE_CONNECTOR_IMAGE:-mojaloop/ml-testing-toolkit}:${CORE_CONNECTOR_TAG:-v18.5.1}
+    env_file:
+      - core-connector-config.env
+    ports:
+      - "13003:3003"
+      - "13004:3004"
+    volumes:
+      - ./docker/core-connector/:/opt/app/core-connector-config/
+    environment:
+      # SERVER CONFIGS
+      - DFSP_SERVER_HOST=0.0.0.0
+      - DFSP_SERVER_PORT=3004
+      - SDK_SERVER_HOST=0.0.0.0
+      - SDK_SERVER_PORT=3003
+      - DFSP_API_SPEC_FILE=./core-connector-config/core-connector-api-spec-dfsp.yml
+      - SDK_API_SPEC_FILE=./core-connector-config/core-connector-api-spec-sdk.yml
+      # Mojaloop Connector
+      - SDK_BASE_URL=http://sdk-scheme-adapter:4001
+    profiles:
+      - core-connector
+
+  redis:
+    image: bitnami/redis:7.0.8-debian-11-r0
+    environment:
+      - ALLOW_EMPTY_PASSWORD=yes
+      - REDIS_PORT=6379
+      - REDIS_REPLICATION_MODE=master
+      - REDIS_TLS_ENABLED=no
+    # ports:
+    #   - "6379:6379"
+
+  sdk-scheme-adapter:
+    image: mojaloop/sdk-scheme-adapter:v24.9.0
+    command:
+      - sh
+      - -c
+      - "yarn start:api-svc"
+    env_file:
+      - ./default-config.env
+      - ./.env
+    environment:
+      - API_TYPE=iso20022
+      - ILP_VERSION=4
+      - CACHE_URL=redis://redis:6379
+      - ENABLE_OAUTH_TOKEN_ENDPOINT=false
+      - ENABLE_BACKEND_EVENT_HANDLER=false
+      - ENABLE_FSPIOP_EVENT_HANDLER=false
+      - ENABLE_TEST_FEATURES=true
+      - INBOUND_LISTEN_PORT=4000
+      - IN_CA_CERT_PATH=/secrets/inbound-cacert.pem
+      - IN_SERVER_CERT_PATH=/secrets/inbound-cert.pem
+      - IN_SERVER_KEY_PATH=/secrets/inbound-key.pem
+      - JWS_SIGNING_KEY_PATH=/jwsSigningKey.key
+      - JWS_VERIFICATION_KEYS_DIRECTORY=/jwsVerificationKeys
+      - METRICS_SERVER_LISTEN_PORT=4004
+      - MULTIPLE_PARTIES_RESPONSE=false
+      - MGMT_API_WS_URL=management-api
+      - MGMT_API_WS_PORT=4005
+      - OUTBOUND_LISTEN_PORT=4001
+      - TEST_LISTEN_PORT=4002
+      - RESOURCE_VERSIONS=transfers=2.0,quotes=2.0,participants=2.0,parties=2.0,transactionRequests=1.1
+      - FSPIOP_API_SERVER_MAX_REQUEST_BYTES=209715200
+      - BACKEND_API_SERVER_MAX_REQUEST_BYTES=209715200
+      - WSO2_BEARER_TOKEN=7718fa9b-be13-3fe7-87f0-a12cf1628168 # dummy value for SDK config
+      - OAUTH_CLIENT_KEY=${AUTH_CLIENT_ID}
+      - OAUTH_CLIENT_SECRET=${AUTH_CLIENT_SECRET}
+      - OAUTH_TOKEN_ENDPOINT=https://keycloak.${SWITCH_DOMAIN}${AUTH_OIDC_TOKEN_ROUTE:-/realms/dfsps/protocol/openid-connect/token}
+      - PEER_ENDPOINT=extapi.${SWITCH_DOMAIN}
+      - ALS_ENDPOINT=extapi.${SWITCH_DOMAIN}
+      - FX_QUOTES_ENDPOINT=extapi.${SWITCH_DOMAIN}
+      - FX_TRANSFERS_ENPOINT=extapi.${SWITCH_DOMAIN}
+    # ports:
+    #   - "4000:4000"
+    #   - "4001:4001"
+    volumes:
+      - ./docker/sdk-scheme-adapter/inbound-cacert.pem:/secrets/inbound-cacert.pem
+      - ./docker/sdk-scheme-adapter/inbound-cert.pem:/secrets/inbound-cert.pem
+      - ./docker/sdk-scheme-adapter/inbound-key.pem:/secrets/inbound-key.pem
+      - ./docker/sdk-scheme-adapter/jwsSigningKey.key:/jwsSigningKey.key
+      - ./docker/sdk-scheme-adapter/jwsVerificationKeys:/jwsVerificationKeys
+    restart: always
+    depends_on:
+      management-api:
+        condition: service_started
+      redis:
+        condition: service_started
+
+  vault:
+    image: &VAULT_IMAGE vault:1.4.2
+    container_name: vault
+    volumes:
+      - ./docker/vault/tmp:/vault/tmp
+      - ./docker/vault/config.hcl:/vault/config/config.hcl
+      - vault-data:/vault/file/
+    environment:
+      - VAULT_ADDR=http://localhost:8233
+    cap_add:
+      - IPC_LOCK
+    # ports:
+    #   - "8233:8233"
+    command: server
+    restart: unless-stopped
+
+  init-vault:
+    image: *VAULT_IMAGE
+    container_name: init-vault
+    environment:
+      - VAULT_ADDR=http://vault:8233
+      - MY_VAULT_TOKEN=myroot
+    volumes:
+      - ./docker/vault/tmp:/vault/tmp
+      - ./docker/vault/vault-init.sh:/usr/local/bin/vault-init.sh
+      - ./docker/vault/vault-root-token:/vault/file/vault-root-token
+      - vault-data:/vault/file/
+    command: /usr/local/bin/vault-init.sh
+    restart: on-failure
+    depends_on:
+      - vault
+
+  haproxy:
+    image: haproxy:2.8-alpine
+    container_name: haproxy
+    ports:
+      - "80:80"
+      - "443:443"
+      - "8404:8404"  # Stats interface
+    volumes:
+      - ./docker/haproxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+      - ./docker/certbot/certs:/etc/ssl/certs:ro
+    depends_on:
+      - frontend
+      - experience-api
+      - management-api
+      - keycloak
+      - ttk-frontend
+      - prometheus
+    restart: unless-stopped
+
+  # envoy-gateway:
+  #   container_name: envoy-gateway
+  #   image: envoyproxy/gateway:v1.5.0
+  #   ports:
+  #     - "443:8443"
+  #     - "8443:8443"
+  #     - "8888:8888"
+  #     - "19000:19000"
+  #     - "19001:19001"
+  #     - "80:8888"
+  #   volumes:
+  #     - ./docker/envoy-gateway/resources:/envoy-gateway-resources
+  #     - ./docker/envoy-gateway/standalone.yaml:/etc/standalone.yaml
+  #     # - ./certs/envoy-oidc-hmac:/tmp/envoy-gateway/certs/envoy-oidc-hmac
+  #     # - ./certs/envoy:/tmp/envoy-gateway/certs/envoy
+  #     # - ./certs/envoy-gateway:/tmp/envoy-gateway/certs/envoy-gateway
+  #     # - ./tmp:/tmp/envoy-gateway
+  #     # - ./certs:/etc/envoy-gateway/certs
+  #   command: server --config-path /etc/standalone.yaml
+  #   # environment:
+  #     # - EG_EXTENSION_APIS_ENABLE_BACKEND=true
+  #     # - EG_EXTENSION_APIS_ENABLE_OAUTH=true
+  #     # - ENVOY_GATEWAY_NAMESPACE=envoy-gateway-system
+  #     # - EG_GATEWAY_CONTROLLER_NAME=gateway.envoyproxy.io/gatewayclass-controller
+  #     # - EG_PROVIDER_TYPE=Custom
+  #     # - EG_PROVIDER_CUSTOM_RESOURCE_TYPE=File
+  #     # - EG_PROVIDER_CUSTOM_RESOURCE_FILE_PATHS=/etc/envoy-gateway/resource.yaml
+  #     # - EG_PROVIDER_CUSTOM_INFRASTRUCTURE_TYPE=Host
+  #     # - EG_LOG_LEVEL=debug
+  #   # depends_on:
+  #   #   - redis
+  #   #   - test-backend
+  #   #   - keycloak
+
+  oathkeeper:
+    image: oryd/oathkeeper:v0.40.9
+    container_name: oathkeeper
+    environment:
+      - PM4ML_DOMAIN=${PM4ML_DOMAIN}
+    ports:
+      - "4455:4455"
+    volumes:
+      - ./docker/oathkeeper/config.yaml.template:/config.yaml.template
+      - ./docker/oathkeeper/rules.json:/rules.json
+      - ./docker/oathkeeper/jwks.json:/jwks.json
+      - ./docker/oathkeeper/replace-portal-domain.sh:/usr/local/bin/replace-portal-domain.sh
+    entrypoint: ["sh", "-c", "/usr/local/bin/replace-portal-domain.sh && oathkeeper --config /tmp/config.yaml serve"]
+
+  portainer:
+    image: portainer/portainer-ce:lts
+    container_name: portainer
+    ports:
+      - "9443:9443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - portainer_data:/data
+    restart: always
+    profiles:
+      - admin
+
+networks:
+  default:
+    name: pm4ml-net
+
+volumes:
+  vault-data:
+  portainer_data:
