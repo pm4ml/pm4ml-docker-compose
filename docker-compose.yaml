@@ -172,7 +172,7 @@ services:
     #   - "6379:6379"
 
   sdk-scheme-adapter:
-    image: mojaloop/sdk-scheme-adapter:v24.9.0
+    image: mojaloop/sdk-scheme-adapter:v24.10.0
     command:
       - sh
       - -c
