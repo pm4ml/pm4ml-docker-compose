@@ -24,6 +24,7 @@ It is designed for **DFSPs (Digital Financial Service Providers)** who need a si
 2. **Firewall Configuration**
 
    Allow incoming traffic on the following ports:
+   
    **Required Ports:**
    - `443` (HTTPS) - for secure access to the Payment Manager Portal and the same port is used for connecting to ML Switch
 
@@ -58,6 +59,11 @@ It is designed for **DFSPs (Digital Financial Service Providers)** who need a si
    git clone https://github.com/pm4ml/pm4ml-docker-compose.git
    cd pm4ml-docker-compose
    docker compose --profile portal --profile ttk up -d
+   ```
+
+   **Additional Profiles:**
+   - `--profile core-connector` (for core-connector service)
+   - `--profile admin` (for portainer service for debugging purposes)
 
 ## Accessing Services
 
