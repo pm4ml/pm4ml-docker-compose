@@ -269,6 +269,10 @@ services:
     volumes:
       - ./docker/haproxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
       - ./docker/certbot/certs:/etc/ssl/certs:ro
+    sysctls:
+      - net.ipv4.tcp_keepalive_intvl=5
+      - net.ipv4.tcp_keepalive_probes=2
+      - net.ipv4.tcp_keepalive_time=7
     depends_on:
       - frontend
       - experience-api
