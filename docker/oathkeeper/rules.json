@@ -24,5 +24,57 @@
         "handler": "noop"
       }
     ]
+  },
+  {
+    "id": "m-api-reonboard",
+    "version": "v0.40.9",
+    "upstream": {
+      "url": "http://management-api:9000"
+    },
+    "match": {
+      "url": "<.*>/reonboard",
+      "methods": [
+        "POST"
+      ]
+    },
+    "authenticators": [
+      {
+        "handler": "cookie_session"
+      }
+    ],
+    "authorizer": {
+      "handler": "allow"
+    },
+    "mutators": [
+      {
+        "handler": "noop"
+      }
+    ]
+  },
+  {
+    "id": "m-api-recreate",
+    "version": "v0.40.9",
+    "upstream": {
+      "url": "http://management-api:9000"
+    },
+    "match": {
+      "url": "<.*>/recreate/.*",
+      "methods": [
+        "POST"
+      ]
+    },
+    "authenticators": [
+      {
+        "handler": "cookie_session"
+      }
+    ],
+    "authorizer": {
+      "handler": "allow"
+    },
+    "mutators": [
+      {
+        "handler": "noop"
+      }
+    ]
   }
 ]
