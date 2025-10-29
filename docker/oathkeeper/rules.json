@@ -81,7 +81,8 @@
     "id": "addon-1",
     "version": "v0.40.9",
     "upstream": {
-      "url": "http://addon1:3000"
+      "url": "http://addon1:3000",
+      "strip_path": "/addon1"
     },
     "match": {
       "url": "<.*>/addon1<.*>",
