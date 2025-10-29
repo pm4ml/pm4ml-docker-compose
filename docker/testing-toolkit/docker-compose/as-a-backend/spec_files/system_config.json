@@ -73,7 +73,7 @@
       "folderPath": "mojaloop_sdk_outbound_scheme_adapter_1.0",
       "hostnames": [],
       "prefix": "/sdk-out",
-      "asynchronous": true
+      "asynchronous": false
     },
     {
       "type": "sdk-scheme-adapter-backend-v2_1_0-openapi3-snippets",
