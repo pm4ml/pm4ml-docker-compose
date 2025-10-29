@@ -342,6 +342,14 @@ services:
     profiles:
       - admin
 
+  addon1:
+    image: ${ADDON1_IMAGE}:${ADDON1_TAG}
+    container_name: addon1
+    env_file:
+      - ./.env
+    profiles:
+      - addons
+
 networks:
   default:
     name: pm4ml-net

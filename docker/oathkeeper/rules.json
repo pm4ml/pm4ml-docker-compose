@@ -76,5 +76,34 @@
         "handler": "noop"
       }
     ]
+  },
+  {
+    "id": "addon-1",
+    "version": "v0.40.9",
+    "upstream": {
+      "url": "http://addon1:3000"
+    },
+    "match": {
+      "url": "<.*>/addon1<.*>",
+      "methods": [
+        "POST",
+        "GET",
+        "PUT",
+        "DELETE"
+      ]
+    },
+    "authenticators": [
+      {
+        "handler": "cookie_session"
+      }
+    ],
+    "authorizer": {
+      "handler": "allow"
+    },
+    "mutators": [
+      {
+        "handler": "noop"
+      }
+    ]
   }
 ]
