@@ -63,7 +63,7 @@ services:
       - portal
 
   management-api:
-    image: pm4ml/mojaloop-payment-manager-management-api:6.9.0
+    image: pm4ml/mojaloop-payment-manager-management-api:7.0.0
     environment:
       - AUTH_ENABLED=true
       - CACHE_SYNC_INTERVAL_SECONDS=30
