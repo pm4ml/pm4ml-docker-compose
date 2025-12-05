@@ -9,8 +9,8 @@ auto_auth {
   method "approle" {
     mount_path = "auth/approle"
     config = {
-      role_id_file_path   = "/vault/role-id"
-      secret_id_file_path = "/vault/secret-id"
+      role_id_file_path   = "/vault/shared-secrets/role-id"
+      secret_id_file_path = "/vault/shared-secrets/secret-id"
     }
   }
 
@@ -21,8 +21,14 @@ auto_auth {
   }
 }
 
+template_config {
+  exit_on_retry_failure = false
+  static_secret_render_interval = "1m"
+  max_connections_per_host = 20
+}
+
 template {
   source      = "/vault/config/secrets.env.tpl"
-  destination = "/vault/secrets/app.env"
+  destination = "/vault/shared-secrets/app.env"
   command     = "sh -c 'echo Secrets rendered at $(date)'"
 }

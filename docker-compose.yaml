@@ -20,16 +20,14 @@ services:
       - KEYCLOAK_IMPORT=/tmp/pm4ml-realm.json
       - DB_VENDOR=h2
       - PORTAL_USER=${PORTAL_USER:-test}
-    env_file:
-      - /vault/secrets/app.env
     volumes:
       - ./docker/keycloak/keycloak-realm.json:/tmp/pm4ml-realm.json.template
       - ./docker/keycloak/replace-portal-user.sh:/usr/local/bin/replace-portal-user.sh
-    volumes_from:
-      - vault-agent:ro
+      - ./docker/vault/wait-for-secrets.sh:/wait-for-secrets.sh:ro
+      - vault-shared-secrets:/vault/shared-secrets:ro
     ports:
       - "8080:8080"
-    entrypoint: ["/bin/sh", "-c", "/usr/local/bin/replace-portal-user.sh && /opt/jboss/tools/docker-entrypoint.sh -b 0.0.0.0"]
+    entrypoint: ["/wait-for-secrets.sh", "/bin/sh", "-c", "/usr/local/bin/replace-portal-user.sh && /opt/jboss/tools/docker-entrypoint.sh -b 0.0.0.0"]
     depends_on:
       vault-agent:
         condition: service_started
@@ -70,6 +68,8 @@ services:
 
   management-api:
     image: pm4ml/mojaloop-payment-manager-management-api:7.0.0
+    entrypoint: ["/wait-for-secrets.sh"]
+    command: ["node", "dist/index.js"]
     environment:
       - AUTH_ENABLED=true
       - CACHE_SYNC_INTERVAL_SECONDS=30
@@ -83,8 +83,8 @@ services:
       - VAULT_ENDPOINT=http://vault:8233
       - ENABLE_CORS=true
       - VAULT_AUTH_METHOD=APP_ROLE
-      - VAULT_ROLE_ID_FILE=/vault/role-id
-      - VAULT_ROLE_SECRET_ID_FILE=/vault/secret-id
+      - VAULT_ROLE_ID_FILE=/vault/shared-secrets/role-id
+      - VAULT_ROLE_SECRET_ID_FILE=/vault/shared-secrets/secret-id
       - VAULT_PKI_CLIENT_ROLE=client-cert-role
       - VAULT_PKI_SERVER_ROLE=server-cert-role
       - VAULT_MOUNT_PKI=pki
@@ -98,12 +98,10 @@ services:
       - WHITELIST_IP=${WHITELIST_IP}
     env_file:
       - ./.env
-      - /vault/secrets/app.env
     volumes:
-      - ./docker/vault/tmp:/vault
+      - ./docker/vault/wait-for-secrets.sh:/wait-for-secrets.sh:ro
       - ./docker/management-api/resources:/resources
-    volumes_from:
-      - vault-agent:ro
+      - vault-shared-secrets:/vault/shared-secrets:ro
     ports:
       # - "9000:9000"
       - "9050:9050"
@@ -182,6 +180,7 @@ services:
 
   sdk-scheme-adapter:
     image: mojaloop/sdk-scheme-adapter:v24.11.0
+    entrypoint: ["/wait-for-secrets.sh"]
     command:
       - sh
       - -c
@@ -189,7 +188,6 @@ services:
     env_file:
       - ./default-config.env
       - ./.env
-      - /vault/secrets/app.env
     environment:
       - API_TYPE=iso20022
       - ILP_VERSION=4
@@ -229,8 +227,8 @@ services:
       - ./docker/sdk-scheme-adapter/inbound-key.pem:/secrets/inbound-key.pem
       - ./docker/sdk-scheme-adapter/jwsSigningKey.key:/jwsSigningKey.key
       - ./docker/sdk-scheme-adapter/jwsVerificationKeys:/jwsVerificationKeys
-    volumes_from:
-      - vault-agent:ro
+      - ./docker/vault/wait-for-secrets.sh:/wait-for-secrets.sh:ro
+      - vault-shared-secrets:/vault/shared-secrets:ro
     restart: always
     depends_on:
       management-api:
@@ -241,18 +239,19 @@ services:
         condition: service_started
 
   vault:
-    image: &VAULT_IMAGE vault:1.4.2
+    image: &VAULT_IMAGE vault:1.13.3
     container_name: vault
     volumes:
-      - ./docker/vault/tmp:/vault/tmp
       - ./docker/vault/config.hcl:/vault/config/config.hcl
       - vault-data:/vault/file/
+      # This volume is just attached to make sure that the data in the tmpfs volume is not cleared after init-vault completes.
+      - vault-shared-secrets:/vault/shared-secrets
     environment:
       - VAULT_ADDR=http://localhost:8233
     cap_add:
       - IPC_LOCK
-    # ports:
-    #   - "8233:8233"
+    ports:
+      - "8233:8233"
     command: server
     restart: unless-stopped
 
@@ -263,10 +262,9 @@ services:
       - VAULT_ADDR=http://vault:8233
       - MY_VAULT_TOKEN=myroot
     volumes:
-      - ./docker/vault/tmp:/vault/tmp
       - ./docker/vault/vault-init.sh:/usr/local/bin/vault-init.sh
-      - ./docker/vault/vault-root-token:/vault/file/vault-root-token
-      - vault-data:/vault/file/
+      - vault-initial-keys:/vault/initial-keys/
+      - vault-shared-secrets:/vault/shared-secrets
     command: /usr/local/bin/vault-init.sh
     restart: on-failure
     depends_on:
@@ -278,16 +276,14 @@ services:
     environment:
       - VAULT_ADDR=http://vault:8233
     volumes:
-      - ./docker/vault/tmp:/vault
       - ./docker/vault/vault-agent.hcl:/vault/config/vault-agent.hcl
       - ./docker/vault/secrets.env.tpl:/vault/config/secrets.env.tpl
-    tmpfs:
-      - /vault/secrets:size=1M,mode=0600
+      - vault-shared-secrets:/vault/shared-secrets
     command: "agent -config=/vault/config/vault-agent.hcl"
     restart: unless-stopped
-    depends_on:
-      init-vault:
-        condition: service_completed_successfully
+    # depends_on:
+    #   init-vault:
+    #     condition: service_completed_successfully
 
   haproxy:
     image: haproxy:2.8-alpine
@@ -307,7 +303,7 @@ services:
       - frontend
       - experience-api
       - management-api
-      - keycloak
+      # - keycloak
       - ttk-frontend
       - prometheus
     restart: unless-stopped
@@ -385,5 +381,15 @@ networks:
     name: pm4ml-net
 
 volumes:
-  vault-data:
-  portainer_data:
+  vault-data: {}
+  # This volume (vault-initial-keys) is used to store initial critical vault keys and tokens.
+  # It is meant to be temporary memory storage and should not persist on disk.
+  # For now, we are using docker disk volume, but need to work on a better solution.
+  vault-initial-keys: {}
+  vault-shared-secrets:
+    driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: size=1m,mode=1777
+  portainer_data: {}

@@ -3,17 +3,17 @@
 set -ex
 
 unseal() {
-  vault operator unseal $(grep 'Key 1:' /vault/file/keys | awk '{print $NF}')
-  vault operator unseal $(grep 'Key 2:' /vault/file/keys | awk '{print $NF}')
-  vault operator unseal $(grep 'Key 3:' /vault/file/keys | awk '{print $NF}')
+  vault operator unseal $(grep 'Key 1:' /vault/initial-keys/keys | awk '{print $NF}')
+  vault operator unseal $(grep 'Key 2:' /vault/initial-keys/keys | awk '{print $NF}')
+  vault operator unseal $(grep 'Key 3:' /vault/initial-keys/keys | awk '{print $NF}')
 }
 
 init() {
-  vault operator init > /vault/file/keys
+  vault operator init > /vault/initial-keys/keys
 }
 
 log_in() {
-   export ROOT_TOKEN=$(grep 'Initial Root Token:' /vault/file/keys | awk '{print $NF}')
+   export ROOT_TOKEN=$(grep 'Initial Root Token:' /vault/initial-keys/keys | awk '{print $NF}')
    vault login "$ROOT_TOKEN"
 }
 
@@ -27,8 +27,8 @@ enable_app_role_auth() {
 }
 
 generate_secret_id() {
-  vault read -field role_id auth/approle/role/my-role/role-id > /vault/tmp/role-id
-  vault write -field secret_id -f auth/approle/role/my-role/secret-id > /vault/tmp/secret-id
+  vault read -field role_id auth/approle/role/my-role/role-id > /vault/shared-secrets/role-id
+  vault write -field secret_id -f auth/approle/role/my-role/secret-id > /vault/shared-secrets/secret-id
 }
 
 populate_data() {
@@ -76,7 +76,7 @@ EOF
   vault write pki_int/roles/example.com allowed_domains=example.com allow_subdomains=true allow_any_name=true allow_localhost=true enforce_hostnames=false max_ttl=600h
 }
 
-if [ -s /vault/file/keys ]; then
+if [ -s /vault/initial-keys/keys ]; then
    unseal
    log_in
    generate_secret_id
@@ -90,4 +90,4 @@ else
    populate_data
 fi
 
-vault status > /vault/file/status
+vault status > /vault/shared-secrets/status
