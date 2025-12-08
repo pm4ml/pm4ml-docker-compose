@@ -9,7 +9,7 @@ services:
     depends_on:
       - experience-api
     profiles:
-      - portal
+      - pm4ml
 
   keycloak:
     image: quay.io/keycloak/keycloak:12.0.4
@@ -20,15 +20,16 @@ services:
       - KEYCLOAK_IMPORT=/tmp/pm4ml-realm.json
       - DB_VENDOR=h2
       - PORTAL_USER=${PORTAL_USER:-test}
-      - PORTAL_PASSWORD=${PORTAL_PASSWORD-test}
     volumes:
       - ./docker/keycloak/keycloak-realm.json:/tmp/pm4ml-realm.json.template
       - ./docker/keycloak/replace-portal-user.sh:/usr/local/bin/replace-portal-user.sh
+      - ./docker/vault/wait-for-secrets.sh:/wait-for-secrets.sh:ro
+      - shared-secrets:/shared-secrets:ro
     ports:
       - "8080:8080"
-    entrypoint: ["/bin/sh", "-c", "/usr/local/bin/replace-portal-user.sh && /opt/jboss/tools/docker-entrypoint.sh -b 0.0.0.0"]
+    entrypoint: ["/wait-for-secrets.sh", "/bin/sh", "-c", "/usr/local/bin/replace-portal-user.sh && /opt/jboss/tools/docker-entrypoint.sh -b 0.0.0.0"]
     profiles:
-      - portal
+      - pm4ml
 
   experience-api:
     image: infitx/mojaloop-payment-manager-experience-api:v3.2.2
@@ -60,10 +61,12 @@ services:
       - redis
     #      - keycloak
     profiles:
-      - portal
+      - pm4ml
 
   management-api:
     image: pm4ml/mojaloop-payment-manager-management-api:7.0.0
+    entrypoint: ["/wait-for-secrets.sh"]
+    command: ["node", "dist/index.js"]
     environment:
       - AUTH_ENABLED=true
       - CACHE_SYNC_INTERVAL_SECONDS=30
@@ -77,41 +80,41 @@ services:
       - VAULT_ENDPOINT=http://vault:8233
       - ENABLE_CORS=true
       - VAULT_AUTH_METHOD=APP_ROLE
-      - VAULT_ROLE_ID_FILE=/vault/role-id
-      - VAULT_ROLE_SECRET_ID_FILE=/vault/secret-id
+      - VAULT_ROLE_ID_FILE=/vault/auth-data/role-id
+      - VAULT_ROLE_SECRET_ID_FILE=/vault/auth-data/secret-id
       - VAULT_PKI_CLIENT_ROLE=client-cert-role
       - VAULT_PKI_SERVER_ROLE=server-cert-role
       - VAULT_MOUNT_PKI=pki
       - VAULT_MOUNT_KV=secrets
       - CERT_MANAGER_ENABLED=false
       - AUTH_CLIENT_ID=${AUTH_CLIENT_ID}
-      - AUTH_CLIENT_SECRET=${AUTH_CLIENT_SECRET}
       - HUB_IAM_PROVIDER_URL=https://keycloak.${SWITCH_DOMAIN}
       - MOJALOOP_CONNECTOR_FQDN=ml-connect.${PM4ML_DOMAIN}
       - CALLBACK_URL=https://ml-connect.${PM4ML_DOMAIN}
       - MCM_SERVER_ENDPOINT=https://mcm.${SWITCH_DOMAIN}/pm4mlapi
       - WHITELIST_IP=${WHITELIST_IP}
-    env_file: ./.env
+    env_file:
+      - ./.env
     volumes:
-      - ./docker/vault/tmp:/vault
+      - ./docker/vault/wait-for-secrets.sh:/wait-for-secrets.sh:ro
       - ./docker/management-api/resources:/resources
+      - shared-secrets:/shared-secrets:ro
+      - vault-auth-data:/vault/auth-data:ro
     ports:
       # - "9000:9000"
       - "9050:9050"
     depends_on:
       redis:
         condition: service_started
-      #      keycloak:
-      #        condition: service_started
-      init-vault:
-        condition: service_completed_successfully
+    profiles:
+      - pm4ml
 
   prometheus:
     image: prom/prometheus:v2.21.0
     volumes:
       - ./docker/prometheus.yml:/etc/prometheus/prometheus.yml
     profiles:
-      - portal
+      - pm4ml
 
   ttk-backend:
     image: mojaloop/ml-testing-toolkit:v18.15.1
@@ -170,9 +173,12 @@ services:
       - REDIS_TLS_ENABLED=no
     # ports:
     #   - "6379:6379"
+    profiles:
+      - pm4ml
 
   sdk-scheme-adapter:
     image: mojaloop/sdk-scheme-adapter:v24.11.0
+    entrypoint: ["/wait-for-secrets.sh"]
     command:
       - sh
       - -c
@@ -205,7 +211,6 @@ services:
       - BACKEND_API_SERVER_MAX_REQUEST_BYTES=209715200
       - WSO2_BEARER_TOKEN=7718fa9b-be13-3fe7-87f0-a12cf1628168 # dummy value for SDK config
       - OAUTH_CLIENT_KEY=${AUTH_CLIENT_ID}
-      - OAUTH_CLIENT_SECRET=${AUTH_CLIENT_SECRET}
       - OAUTH_TOKEN_ENDPOINT=https://keycloak.${SWITCH_DOMAIN}${AUTH_OIDC_TOKEN_ROUTE:-/realms/dfsps/protocol/openid-connect/token}
       - PEER_ENDPOINT=extapi.${SWITCH_DOMAIN}
       - ALS_ENDPOINT=extapi.${SWITCH_DOMAIN}
@@ -220,28 +225,33 @@ services:
       - ./docker/sdk-scheme-adapter/inbound-key.pem:/secrets/inbound-key.pem
       - ./docker/sdk-scheme-adapter/jwsSigningKey.key:/jwsSigningKey.key
       - ./docker/sdk-scheme-adapter/jwsVerificationKeys:/jwsVerificationKeys
+      - ./docker/vault/wait-for-secrets.sh:/wait-for-secrets.sh:ro
+      - shared-secrets:/shared-secrets:ro
     restart: always
     depends_on:
       management-api:
         condition: service_started
       redis:
         condition: service_started
+    profiles:
+      - pm4ml
 
   vault:
-    image: &VAULT_IMAGE vault:1.4.2
+    image: &VAULT_IMAGE vault:1.13.3
     container_name: vault
     volumes:
-      - ./docker/vault/tmp:/vault/tmp
       - ./docker/vault/config.hcl:/vault/config/config.hcl
       - vault-data:/vault/file/
     environment:
       - VAULT_ADDR=http://localhost:8233
     cap_add:
       - IPC_LOCK
-    # ports:
-    #   - "8233:8233"
+    ports:
+      - "8233:8233"
     command: server
     restart: unless-stopped
+    profiles:
+      - vault
 
   init-vault:
     image: *VAULT_IMAGE
@@ -250,13 +260,34 @@ services:
       - VAULT_ADDR=http://vault:8233
       - MY_VAULT_TOKEN=myroot
     volumes:
-      - ./docker/vault/tmp:/vault/tmp
       - ./docker/vault/vault-init.sh:/usr/local/bin/vault-init.sh
-      - ./docker/vault/vault-root-token:/vault/file/vault-root-token
-      - vault-data:/vault/file/
+      - vault-auth-data:/vault/auth-data
+    tmpfs:
+      - /vault/initial-keys:size=1m,mode=1777
     command: /usr/local/bin/vault-init.sh
     restart: on-failure
     depends_on:
+      - vault
+    profiles:
+      - vault
+
+  vault-agent:
+    image: *VAULT_IMAGE
+    container_name: vault-agent
+    environment:
+      - VAULT_ADDR=http://vault:8233
+    volumes:
+      - ./docker/vault/vault-agent.hcl:/vault/config/vault-agent.hcl
+      - ./docker/vault/secrets.env.tpl:/vault/config/secrets.env.tpl
+      - ./docker/vault/create-secrets.sh:/vault/create-secrets.sh
+      - vault-auth-data:/vault/auth-data:ro
+      - shared-secrets:/shared-secrets
+    command: "agent -config=/vault/config/vault-agent.hcl"
+    restart: unless-stopped
+    # depends_on:
+    #   init-vault:
+    #     condition: service_completed_successfully
+    profiles:
       - vault
 
   haproxy:
@@ -277,10 +308,12 @@ services:
       - frontend
       - experience-api
       - management-api
-      - keycloak
-      - ttk-frontend
+      # - keycloak
+      # - ttk-frontend
       - prometheus
     restart: unless-stopped
+    profiles:
+      - pm4ml
 
   # envoy-gateway:
   #   container_name: envoy-gateway
@@ -329,6 +362,8 @@ services:
       - ./docker/oathkeeper/jwks.json:/jwks.json
       - ./docker/oathkeeper/replace-portal-domain.sh:/usr/local/bin/replace-portal-domain.sh
     entrypoint: ["sh", "-c", "/usr/local/bin/replace-portal-domain.sh && oathkeeper --config /tmp/config.yaml serve"]
+    profiles:
+      - pm4ml
 
   portainer:
     image: portainer/portainer-ce:lts
@@ -355,5 +390,14 @@ networks:
     name: pm4ml-net
 
 volumes:
-  vault-data:
-  portainer_data:
+  vault-data: {}
+  vault-auth-data:
+    name: pm4ml-vault-auth-data
+  shared-secrets:
+    name: pm4ml-shared-secrets
+    driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: size=1m,mode=1777
+  portainer_data: {}
