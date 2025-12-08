@@ -9,8 +9,8 @@ auto_auth {
   method "approle" {
     mount_path = "auth/approle"
     config = {
-      role_id_file_path   = "/vault/shared-secrets/role-id"
-      secret_id_file_path = "/vault/shared-secrets/secret-id"
+      role_id_file_path   = "/vault/auth-data/role-id"
+      secret_id_file_path = "/vault/auth-data/secret-id"
     }
   }
 
@@ -29,6 +29,6 @@ template_config {
 
 template {
   source      = "/vault/config/secrets.env.tpl"
-  destination = "/vault/shared-secrets/app.env"
+  destination = "/shared-secrets/app.env"
   command     = "sh -c 'echo Secrets rendered at $(date)'"
 }

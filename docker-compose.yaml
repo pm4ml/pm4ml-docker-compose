@@ -9,7 +9,7 @@ services:
     depends_on:
       - experience-api
     profiles:
-      - portal
+      - pm4ml
 
   keycloak:
     image: quay.io/keycloak/keycloak:12.0.4
@@ -24,15 +24,12 @@ services:
       - ./docker/keycloak/keycloak-realm.json:/tmp/pm4ml-realm.json.template
       - ./docker/keycloak/replace-portal-user.sh:/usr/local/bin/replace-portal-user.sh
       - ./docker/vault/wait-for-secrets.sh:/wait-for-secrets.sh:ro
-      - vault-shared-secrets:/vault/shared-secrets:ro
+      - shared-secrets:/shared-secrets:ro
     ports:
       - "8080:8080"
     entrypoint: ["/wait-for-secrets.sh", "/bin/sh", "-c", "/usr/local/bin/replace-portal-user.sh && /opt/jboss/tools/docker-entrypoint.sh -b 0.0.0.0"]
-    depends_on:
-      vault-agent:
-        condition: service_started
     profiles:
-      - portal
+      - pm4ml
 
   experience-api:
     image: infitx/mojaloop-payment-manager-experience-api:v3.2.2
@@ -64,7 +61,7 @@ services:
       - redis
     #      - keycloak
     profiles:
-      - portal
+      - pm4ml
 
   management-api:
     image: pm4ml/mojaloop-payment-manager-management-api:7.0.0
@@ -83,8 +80,8 @@ services:
       - VAULT_ENDPOINT=http://vault:8233
       - ENABLE_CORS=true
       - VAULT_AUTH_METHOD=APP_ROLE
-      - VAULT_ROLE_ID_FILE=/vault/shared-secrets/role-id
-      - VAULT_ROLE_SECRET_ID_FILE=/vault/shared-secrets/secret-id
+      - VAULT_ROLE_ID_FILE=/vault/auth-data/role-id
+      - VAULT_ROLE_SECRET_ID_FILE=/vault/auth-data/secret-id
       - VAULT_PKI_CLIENT_ROLE=client-cert-role
       - VAULT_PKI_SERVER_ROLE=server-cert-role
       - VAULT_MOUNT_PKI=pki
@@ -101,24 +98,23 @@ services:
     volumes:
       - ./docker/vault/wait-for-secrets.sh:/wait-for-secrets.sh:ro
       - ./docker/management-api/resources:/resources
-      - vault-shared-secrets:/vault/shared-secrets:ro
+      - shared-secrets:/shared-secrets:ro
+      - vault-auth-data:/vault/auth-data:ro
     ports:
       # - "9000:9000"
       - "9050:9050"
     depends_on:
       redis:
         condition: service_started
-      #      keycloak:
-      #        condition: service_started
-      vault-agent:
-        condition: service_started
+    profiles:
+      - pm4ml
 
   prometheus:
     image: prom/prometheus:v2.21.0
     volumes:
       - ./docker/prometheus.yml:/etc/prometheus/prometheus.yml
     profiles:
-      - portal
+      - pm4ml
 
   ttk-backend:
     image: mojaloop/ml-testing-toolkit:v18.15.1
@@ -177,6 +173,8 @@ services:
       - REDIS_TLS_ENABLED=no
     # ports:
     #   - "6379:6379"
+    profiles:
+      - pm4ml
 
   sdk-scheme-adapter:
     image: mojaloop/sdk-scheme-adapter:v24.11.0
@@ -228,15 +226,15 @@ services:
       - ./docker/sdk-scheme-adapter/jwsSigningKey.key:/jwsSigningKey.key
       - ./docker/sdk-scheme-adapter/jwsVerificationKeys:/jwsVerificationKeys
       - ./docker/vault/wait-for-secrets.sh:/wait-for-secrets.sh:ro
-      - vault-shared-secrets:/vault/shared-secrets:ro
+      - shared-secrets:/shared-secrets:ro
     restart: always
     depends_on:
       management-api:
         condition: service_started
       redis:
         condition: service_started
-      vault-agent:
-        condition: service_started
+    profiles:
+      - pm4ml
 
   vault:
     image: &VAULT_IMAGE vault:1.13.3
@@ -244,8 +242,6 @@ services:
     volumes:
       - ./docker/vault/config.hcl:/vault/config/config.hcl
       - vault-data:/vault/file/
-      # This volume is just attached to make sure that the data in the tmpfs volume is not cleared after init-vault completes.
-      - vault-shared-secrets:/vault/shared-secrets
     environment:
       - VAULT_ADDR=http://localhost:8233
     cap_add:
@@ -254,6 +250,8 @@ services:
       - "8233:8233"
     command: server
     restart: unless-stopped
+    profiles:
+      - vault
 
   init-vault:
     image: *VAULT_IMAGE
@@ -263,11 +261,14 @@ services:
       - MY_VAULT_TOKEN=myroot
     volumes:
       - ./docker/vault/vault-init.sh:/usr/local/bin/vault-init.sh
-      - vault-initial-keys:/vault/initial-keys/
-      - vault-shared-secrets:/vault/shared-secrets
+      - vault-auth-data:/vault/auth-data
+    tmpfs:
+      - /vault/initial-keys:size=1m,mode=1777
     command: /usr/local/bin/vault-init.sh
     restart: on-failure
     depends_on:
+      - vault
+    profiles:
       - vault
 
   vault-agent:
@@ -278,12 +279,16 @@ services:
     volumes:
       - ./docker/vault/vault-agent.hcl:/vault/config/vault-agent.hcl
       - ./docker/vault/secrets.env.tpl:/vault/config/secrets.env.tpl
-      - vault-shared-secrets:/vault/shared-secrets
+      - ./docker/vault/create-secrets.sh:/vault/create-secrets.sh
+      - vault-auth-data:/vault/auth-data:ro
+      - shared-secrets:/shared-secrets
     command: "agent -config=/vault/config/vault-agent.hcl"
     restart: unless-stopped
     # depends_on:
     #   init-vault:
     #     condition: service_completed_successfully
+    profiles:
+      - vault
 
   haproxy:
     image: haproxy:2.8-alpine
@@ -304,9 +309,11 @@ services:
       - experience-api
       - management-api
       # - keycloak
-      - ttk-frontend
+      # - ttk-frontend
       - prometheus
     restart: unless-stopped
+    profiles:
+      - pm4ml
 
   # envoy-gateway:
   #   container_name: envoy-gateway
@@ -355,6 +362,8 @@ services:
       - ./docker/oathkeeper/jwks.json:/jwks.json
       - ./docker/oathkeeper/replace-portal-domain.sh:/usr/local/bin/replace-portal-domain.sh
     entrypoint: ["sh", "-c", "/usr/local/bin/replace-portal-domain.sh && oathkeeper --config /tmp/config.yaml serve"]
+    profiles:
+      - pm4ml
 
   portainer:
     image: portainer/portainer-ce:lts
@@ -382,11 +391,10 @@ networks:
 
 volumes:
   vault-data: {}
-  # This volume (vault-initial-keys) is used to store initial critical vault keys and tokens.
-  # It is meant to be temporary memory storage and should not persist on disk.
-  # For now, we are using docker disk volume, but need to work on a better solution.
-  vault-initial-keys: {}
-  vault-shared-secrets:
+  vault-auth-data:
+    name: pm4ml-vault-auth-data
+  shared-secrets:
+    name: pm4ml-shared-secrets
     driver: local
     driver_opts:
       type: tmpfs

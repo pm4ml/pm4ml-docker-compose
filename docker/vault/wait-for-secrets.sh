@@ -3,9 +3,10 @@
 
 set -e
 
-SECRETS_FILE="/vault/shared-secrets/app.env"
-MAX_WAIT=30
+SECRETS_FILE="/shared-secrets/app.env"
+MAX_WAIT=300
 WAIT_COUNT=0
+TIME_INTERVAL=5
 
 echo "Waiting for Vault secrets to be rendered..."
 
@@ -17,7 +18,7 @@ while [ ! -f "$SECRETS_FILE" ]; do
   fi
 
   echo "Waiting for $SECRETS_FILE... ($WAIT_COUNT/$MAX_WAIT)"
-  sleep 1
+  sleep $TIME_INTERVAL
   WAIT_COUNT=$((WAIT_COUNT + 1))
 done
 
