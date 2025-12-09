@@ -335,9 +335,11 @@ store_keys_tpm() {
     }
 
     # Seal the unseal keys
-    tpm_output=$(sudo tpm2_create -C "$TPM_PRIMARY_CTX" -i "$UNSEAL_KEY_FILE" -u "$TPM_SEAL_PUB" -r "$TPM_SEAL_PRIV" 2>&1) || {
+    # Add -a parameter to specify attributes for sealing data
+    tpm_output=$(sudo tpm2_create -C "$TPM_PRIMARY_CTX" -i "$UNSEAL_KEY_FILE" -u "$TPM_SEAL_PUB" -r "$TPM_SEAL_PRIV" -a "fixedtpm|fixedparent" 2>&1) || {
         log_error "Failed to seal keys with TPM"
         log_error "TPM error: $tpm_output"
+        log_info "File size: $(stat -c%s "$UNSEAL_KEY_FILE" 2>/dev/null || stat -f%z "$UNSEAL_KEY_FILE") bytes"
         return 1
     }
 
