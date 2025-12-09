@@ -15,8 +15,6 @@ INIT_VAULT_CONTAINER="init-vault"
 KEYRING_NAME="vault-unseal"
 TPM_STORAGE_DIR="./tpm-data"
 TPM_PRIMARY_CTX="${TPM_STORAGE_DIR}/vault-primary.ctx"
-TPM_SEAL_PUB="${TPM_STORAGE_DIR}/vault-seal.pub"
-TPM_SEAL_PRIV="${TPM_STORAGE_DIR}/vault-seal.priv"
 
 # Colors for output
 RED='\033[0;31m'
@@ -431,10 +429,11 @@ clear_keys_tpm() {
         local seal_pub="${TPM_STORAGE_DIR}/seal-key-${i}.pub"
         local seal_priv="${TPM_STORAGE_DIR}/seal-key-${i}.priv"
         local sealed_ctx="${TPM_STORAGE_DIR}/vault-sealed-key-${i}.ctx"
-        local key_temp="${TPM_STORAGE_DIR}/unseal-key-${i}.tmp"
 
-        for file in "$seal_pub" "$seal_priv" "$sealed_ctx" "$key_temp"; do
+        for file in "$seal_pub" "$seal_priv" "$sealed_ctx"; do
+            log_info "Removing $file if exists..."
             if [[ -f "$file" ]]; then
+                log_info "Deleting $file ..."
                 sudo shred -u "$file" 2>/dev/null || sudo rm -f "$file"
                 ((files_removed++))
             fi
