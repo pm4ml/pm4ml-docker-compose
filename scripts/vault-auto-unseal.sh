@@ -393,8 +393,9 @@ retrieve_keys_tpm() {
 
         # Unseal this key
         local key
-        key=$(sudo tpm2_unseal -c "$sealed_ctx" 2>/dev/null) || {
+        key=$(sudo tpm2_unseal -c "$sealed_ctx" 2>&1) || {
             log_error "Failed to unseal key $i from TPM"
+            log_error "TPM error: $key"
             return 1
         }
 
