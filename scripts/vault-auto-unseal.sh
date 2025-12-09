@@ -259,8 +259,16 @@ retrieve_keys_keyring() {
         return 1
     fi
 
-    # Convert newline-separated keys to space-separated, removing empty lines and trailing spaces
-    echo "$combined_keys" | grep -v '^$' | tr '\n' ' ' | sed 's/  */ /g' | sed 's/ $//' | sed 's/^ //'
+    # Debug: show raw data
+    log_info "Raw key data length: ${#combined_keys} characters"
+
+    # Convert newline-separated keys to space-separated
+    # Use mapfile to properly handle the data
+    local -a keys_from_storage
+    mapfile -t keys_from_storage <<< "$combined_keys"
+
+    # Output space-separated keys
+    echo "${keys_from_storage[0]} ${keys_from_storage[1]} ${keys_from_storage[2]}"
 }
 
 # Clear keys from Linux keyring
