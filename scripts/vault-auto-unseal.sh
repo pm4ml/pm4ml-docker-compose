@@ -263,8 +263,8 @@ retrieve_keys_keyring() {
         return 1
     fi
 
-    # Convert newline-separated keys to space-separated
-    echo "$combined_keys" | tr '\n' ' ' | sed 's/ $//'
+    # Convert newline-separated keys to space-separated, removing empty lines and trailing spaces
+    echo "$combined_keys" | grep -v '^$' | tr '\n' ' ' | sed 's/  */ /g' | sed 's/ $//' | sed 's/^ //'
 }
 
 # Clear keys from Linux keyring
@@ -476,22 +476,28 @@ unseal_vault() {
     local -a key_array
     read -ra key_array <<< "$keys_string"
 
+    log_info "Retrieved ${#key_array[@]} keys from storage"
+
     # Validate we have at least 3 keys
     if [[ ${#key_array[@]} -lt 3 ]]; then
         log_error "Expected at least 3 keys, got ${#key_array[@]}"
+        log_error "Keys string: '$keys_string'"
         return 1
     fi
 
     local unseal_count=0
     for key in "${key_array[@]}"; do
         if [[ -n "$key" ]]; then
+            log_info "Applying unseal key $(($unseal_count + 1))..."
             if docker exec "$VAULT_CONTAINER" vault operator unseal "$key" > /dev/null 2>&1; then
                 ((unseal_count++))
-                log_info "Applied unseal key $unseal_count"
+                log_info "Successfully applied unseal key $unseal_count"
             else
-                log_error "Failed to apply unseal key $unseal_count"
+                log_error "Failed to apply unseal key $(($unseal_count + 1))"
                 return 1
             fi
+        else
+            log_warn "Skipping empty key"
         fi
     done
 
