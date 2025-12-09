@@ -207,9 +207,15 @@ get_keys_interactive() {
 
 # Store keys using Linux keyring
 store_keys_keyring() {
-    local keys=("$@")
+    local -a keys=("$@")
 
     log_info "Storing keys in Linux keyring..."
+
+    # Validate we have 3 keys
+    if [[ ${#keys[@]} -ne 3 ]]; then
+        log_error "Expected 3 keys, got ${#keys[@]}"
+        return 1
+    fi
 
     local key_name="${KEYRING_NAME}-keys"
 
@@ -308,9 +314,15 @@ clear_keys_keyring() {
 
 # Store keys using TPM
 store_keys_tpm() {
-    local keys=("$@")
+    local -a keys=("$@")
 
     log_info "Storing keys in TPM..."
+
+    # Validate we have 3 keys
+    if [[ ${#keys[@]} -ne 3 ]]; then
+        log_error "Expected 3 keys, got ${#keys[@]}"
+        return 1
+    fi
 
     # Create TPM storage directory if it doesn't exist
     if [[ ! -d "$TPM_STORAGE_DIR" ]]; then

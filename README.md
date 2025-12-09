@@ -106,3 +106,6 @@ You need to run the unseal command three times with different unseal keys:
 ```bash
 docker exec -it vault vault operator unseal
 ```
+
+## Auto-unseal Vault
+Refer to [VAULT-AUTO-UNSEAL.md](./VAULT-AUTO-UNSEAL.md) for instructions on setting up auto-unseal for Vault using various methods.
