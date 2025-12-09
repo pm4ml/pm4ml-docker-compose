@@ -13,12 +13,10 @@ INIT_VAULT_CONTAINER="init-vault"
 
 # Storage paths
 KEYRING_NAME="vault-unseal"
-TPM_STORAGE_DIR="."
-TPM_PRIMARY_CTX="/tmp/vault-primary.ctx"
+TPM_STORAGE_DIR="./tpm-data"
+TPM_PRIMARY_CTX="${TPM_STORAGE_DIR}/vault-primary.ctx"
 TPM_SEAL_PUB="${TPM_STORAGE_DIR}/vault-seal.pub"
 TPM_SEAL_PRIV="${TPM_STORAGE_DIR}/vault-seal.priv"
-TPM_SEALED_CTX="/tmp/vault-sealed.ctx"
-UNSEAL_KEY_FILE="/tmp/vault-unseal.key"  # This should be temporary as it contains plaintext keys
 
 # Colors for output
 RED='\033[0;31m'
@@ -347,7 +345,7 @@ store_keys_tpm() {
         local key_file="/tmp/unseal-key-$((i+1)).tmp"
         local seal_pub="${TPM_STORAGE_DIR}/seal-key-$((i+1)).pub"
         local seal_priv="${TPM_STORAGE_DIR}/seal-key-$((i+1)).priv"
-        local sealed_ctx="/tmp/sealed-key-$((i+1)).ctx"  # Context files in /tmp (ephemeral)
+        local sealed_ctx="${TPM_STORAGE_DIR}/vault-sealed-key-$((i+1)).ctx"
 
         # Write individual key to temp file
         printf "%s" "${keys[$i]}" > "$key_file"
@@ -388,7 +386,7 @@ retrieve_keys_tpm() {
     for i in 1 2 3; do
         local seal_pub="${TPM_STORAGE_DIR}/seal-key-${i}.pub"
         local seal_priv="${TPM_STORAGE_DIR}/seal-key-${i}.priv"
-        local sealed_ctx="/tmp/sealed-key-${i}.ctx"  # Always use /tmp for context files
+        local sealed_ctx="${TPM_STORAGE_DIR}/vault-sealed-key-${i}.ctx"
 
         if [[ ! -f "$seal_pub" ]] || [[ ! -f "$seal_priv" ]]; then
             log_error "TPM key $i files not found"
@@ -428,13 +426,14 @@ clear_keys_tpm() {
         ((files_removed++))
     fi
 
-    # Remove all individual key files (only pub/priv, ctx files are in /tmp)
+    # Remove all individual key files
     for i in 1 2 3; do
         local seal_pub="${TPM_STORAGE_DIR}/seal-key-${i}.pub"
         local seal_priv="${TPM_STORAGE_DIR}/seal-key-${i}.priv"
+        local sealed_ctx="${TPM_STORAGE_DIR}/vault-sealed-key-${i}.ctx"
         local key_temp="${TPM_STORAGE_DIR}/unseal-key-${i}.tmp"
 
-        for file in "$seal_pub" "$seal_priv" "$key_temp"; do
+        for file in "$seal_pub" "$seal_priv" "$sealed_ctx" "$key_temp"; do
             if [[ -f "$file" ]]; then
                 sudo shred -u "$file" 2>/dev/null || sudo rm -f "$file"
                 ((files_removed++))

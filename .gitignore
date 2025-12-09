@@ -6,6 +6,4 @@ docker/haproxy/certs/*.pem
 docker/certbot/etc
 docker/certbot/certs
 *-IGNORE*
-*.priv
-*.pub
-*.ctx
+tpm-data/
