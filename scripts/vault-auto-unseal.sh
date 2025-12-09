@@ -322,8 +322,8 @@ store_keys_tpm() {
         log_info "Created TPM storage directory: $TPM_STORAGE_DIR"
     fi
 
-    # Combine the three keys into a single file (newline separated)
-    printf "%s\n" "${keys[@]}" > "$UNSEAL_KEY_FILE"
+    # Combine the three keys into a single file (newline separated, no trailing newline)
+    printf "%s\n%s\n%s" "${keys[0]}" "${keys[1]}" "${keys[2]}" > "$UNSEAL_KEY_FILE"
 
     # Create primary key
     local tpm_output
