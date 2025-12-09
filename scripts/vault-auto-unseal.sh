@@ -326,20 +326,24 @@ store_keys_tpm() {
     printf "%s\n" "${keys[@]}" > "$UNSEAL_KEY_FILE"
 
     # Create primary key
-    sudo tpm2_createprimary -C o -c "$TPM_PRIMARY_CTX" > /dev/null 2>&1 || {
+    local tpm_output
+    tpm_output=$(sudo tpm2_createprimary -C o -c "$TPM_PRIMARY_CTX" 2>&1) || {
         log_error "Failed to create TPM primary key"
+        log_error "TPM error: $tpm_output"
         return 1
     }
 
     # Seal the unseal keys
-    sudo tpm2_create -C "$TPM_PRIMARY_CTX" -i "$UNSEAL_KEY_FILE" -u "$TPM_SEAL_PUB" -r "$TPM_SEAL_PRIV" > /dev/null 2>&1 || {
+    tpm_output=$(sudo tpm2_create -C "$TPM_PRIMARY_CTX" -i "$UNSEAL_KEY_FILE" -u "$TPM_SEAL_PUB" -r "$TPM_SEAL_PRIV" 2>&1) || {
         log_error "Failed to seal keys with TPM"
+        log_error "TPM error: $tpm_output"
         return 1
     }
 
     # Load the sealed object
-    sudo tpm2_load -C "$TPM_PRIMARY_CTX" -u "$TPM_SEAL_PUB" -r "$TPM_SEAL_PRIV" -c "$TPM_SEALED_CTX" > /dev/null 2>&1 || {
+    tpm_output=$(sudo tpm2_load -C "$TPM_PRIMARY_CTX" -u "$TPM_SEAL_PUB" -r "$TPM_SEAL_PRIV" -c "$TPM_SEALED_CTX" 2>&1) || {
         log_error "Failed to load sealed keys"
+        log_error "TPM error: $tpm_output"
         return 1
     }
 
