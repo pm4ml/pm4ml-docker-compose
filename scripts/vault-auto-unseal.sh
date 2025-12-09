@@ -219,9 +219,12 @@ store_keys_keyring() {
         keyctl unlink "$old_key_id" @u 2>/dev/null || true
     fi
 
-    # Add keys directly to user keyring - use printf to maintain exact format
+    # Add keys directly to user keyring using a special delimiter
+    # Use ||| as delimiter since it won't appear in base64 keys
+    local combined_keys="${keys[0]}|||${keys[1]}|||${keys[2]}"
+
     local new_key_id
-    new_key_id=$(printf "%s\n%s\n%s" "${keys[0]}" "${keys[1]}" "${keys[2]}" | keyctl padd user "$key_name" @u 2>&1) || {
+    new_key_id=$(echo -n "$combined_keys" | keyctl padd user "$key_name" @u 2>&1) || {
         log_error "Failed to add key $key_name: $new_key_id"
         return 1
     }
@@ -259,16 +262,8 @@ retrieve_keys_keyring() {
         return 1
     fi
 
-    # Debug: show raw data
-    log_info "Raw key data length: ${#combined_keys} characters"
-
-    # Convert newline-separated keys to space-separated
-    # Use mapfile to properly handle the data
-    local -a keys_from_storage
-    mapfile -t keys_from_storage <<< "$combined_keys"
-
-    # Output space-separated keys
-    echo "${keys_from_storage[0]} ${keys_from_storage[1]} ${keys_from_storage[2]}"
+    # Split by delimiter ||| and output space-separated
+    echo "$combined_keys" | sed 's/|||/ /g'
 }
 
 # Clear keys from Linux keyring
