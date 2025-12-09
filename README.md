@@ -38,6 +38,8 @@ It is designed for **DFSPs (Digital Financial Service Providers)** who need a si
    ```bash
    git clone https://github.com/pm4ml/pm4ml-docker-compose.git
    cd pm4ml-docker-compose
+   sudo usermod -aG docker $USER
+   newgrp docker
    ```
 
 4. **Populate .env file**
