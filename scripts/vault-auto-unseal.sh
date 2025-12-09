@@ -230,6 +230,12 @@ store_keys_keyring() {
         return 1
     }
 
+    # Set permissions to allow full access for possessor and user (0x3f3f0000)
+    # This allows the key to be readable when running as the same user (root)
+    keyctl setperm "$new_key_id" 0x3f3f0000 || {
+        log_warn "Failed to set key permissions, key might not be readable"
+    }
+
     log_success "Keys stored in user keyring successfully (ID: $new_key_id)"
 }
 
@@ -237,19 +243,33 @@ store_keys_keyring() {
 retrieve_keys_keyring() {
     local key_name="${KEYRING_NAME}-keys"
     local key_id
-    key_id=$(keyctl search @u user "$key_name" 2>&1) || {
+    key_id=$(keyctl search @u user "$key_name" 2>&1)
+    local search_result=$?
+
+    if [[ $search_result -ne 0 ]]; then
         log_error "Key '$key_name' not found in user keyring"
         log_error "Keyctl error: $key_id"
         return 1
-    }
+    fi
 
-    # Retrieve the combined keys and convert newlines to spaces
+    log_info "Found key ID: $key_id"
+
+    # Retrieve the combined keys
     local combined_keys
-    combined_keys=$(keyctl pipe "$key_id" 2>&1) || {
+    combined_keys=$(keyctl pipe "$key_id" 2>&1)
+    local pipe_result=$?
+
+    if [[ $pipe_result -ne 0 ]]; then
         log_error "Failed to retrieve keys from keyring"
         log_error "Keyctl error: $combined_keys"
         return 1
-    }
+    fi
+
+    # Check if we got data
+    if [[ -z "$combined_keys" ]]; then
+        log_error "Retrieved empty data from keyring"
+        return 1
+    fi
 
     # Convert newline-separated keys to space-separated
     echo "$combined_keys" | tr '\n' ' ' | sed 's/ $//'
