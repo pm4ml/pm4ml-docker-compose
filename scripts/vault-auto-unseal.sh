@@ -424,33 +424,17 @@ clear_keys_tpm() {
         ((files_removed++))
     fi
 
-    # Remove all individual key files
-    for i in 1 2 3; do
-        local seal_pub="${TPM_STORAGE_DIR}/seal-key-${i}.pub"
-        local seal_priv="${TPM_STORAGE_DIR}/seal-key-${i}.priv"
-        local sealed_ctx="${TPM_STORAGE_DIR}/vault-sealed-key-${i}.ctx"
-
-        for file in "$seal_pub" "$seal_priv" "$sealed_ctx"; do
-            log_info "Removing $file if exists..."
-            if [[ -f "$file" ]]; then
-                log_info "Deleting $file ..."
-                sudo shred -u "$file" 2>/dev/null || sudo rm -f "$file"
-                ((files_removed++))
-            fi
-        done
-    done
-
-    # Remove the TPM storage directory if it's empty
+    # Remove the TPM storage directory
     if [[ -d "$TPM_STORAGE_DIR" ]]; then
-        if sudo rmdir "$TPM_STORAGE_DIR" 2>/dev/null; then
-            log_info "Removed empty TPM storage directory: $TPM_STORAGE_DIR"
-        fi
+        sudo rm -rf "$TPM_STORAGE_DIR"
+        log_info "Removed TPM storage directory: $TPM_STORAGE_DIR"
+        ((files_removed++))
     fi
 
     if [[ $files_removed -eq 0 ]]; then
         log_warn "No TPM key files found to clear"
     else
-        log_success "Cleared $files_removed TPM key file(s)"
+        log_success "Cleared TPM key file(s)"
     fi
 }
 
