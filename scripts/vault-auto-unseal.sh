@@ -237,14 +237,19 @@ store_keys_keyring() {
 retrieve_keys_keyring() {
     local key_name="${KEYRING_NAME}-keys"
     local key_id
-    key_id=$(keyctl search @u user "$key_name" 2>/dev/null) || {
+    key_id=$(keyctl search @u user "$key_name" 2>&1) || {
         log_error "Key '$key_name' not found in user keyring"
+        log_error "Keyctl error: $key_id"
         return 1
     }
 
     # Retrieve the combined keys and convert newlines to spaces
     local combined_keys
-    combined_keys=$(keyctl pipe "$key_id")
+    combined_keys=$(keyctl pipe "$key_id" 2>&1) || {
+        log_error "Failed to retrieve keys from keyring"
+        log_error "Keyctl error: $combined_keys"
+        return 1
+    }
 
     # Convert newline-separated keys to space-separated
     echo "$combined_keys" | tr '\n' ' ' | sed 's/ $//'
@@ -436,9 +441,21 @@ unseal_vault() {
 
     local keys_string
     if [[ "$STORAGE_BACKEND" == "keyring" ]]; then
-        keys_string=$(retrieve_keys_keyring) || return 1
+        keys_string=$(retrieve_keys_keyring) || {
+            log_error "Failed to retrieve keys from keyring"
+            return 1
+        }
     else
-        keys_string=$(retrieve_keys_tpm) || return 1
+        keys_string=$(retrieve_keys_tpm) || {
+            log_error "Failed to retrieve keys from TPM"
+            return 1
+        }
+    fi
+
+    # Validate we got keys
+    if [[ -z "$keys_string" ]]; then
+        log_error "Retrieved empty keys"
+        return 1
     fi
 
     log_info "Unsealing vault..."
@@ -447,14 +464,34 @@ unseal_vault() {
     local -a key_array
     read -ra key_array <<< "$keys_string"
 
+    # Validate we have at least 3 keys
+    if [[ ${#key_array[@]} -lt 3 ]]; then
+        log_error "Expected at least 3 keys, got ${#key_array[@]}"
+        return 1
+    fi
+
+    local unseal_count=0
     for key in "${key_array[@]}"; do
-        docker exec "$VAULT_CONTAINER" vault operator unseal "$key" > /dev/null 2>&1 || {
-            log_error "Failed to unseal vault with key"
-            return 1
-        }
+        if [[ -n "$key" ]]; then
+            if docker exec "$VAULT_CONTAINER" vault operator unseal "$key" > /dev/null 2>&1; then
+                ((unseal_count++))
+                log_info "Applied unseal key $unseal_count"
+            else
+                log_error "Failed to apply unseal key $unseal_count"
+                return 1
+            fi
+        fi
     done
 
-    log_success "Vault unsealed successfully"
+    # Verify vault is actually unsealed
+    local final_status
+    final_status=$(get_seal_status)
+    if [[ "$final_status" == "false" ]]; then
+        log_success "Vault unsealed successfully (applied $unseal_count keys)"
+    else
+        log_error "Vault is still sealed after applying keys"
+        return 1
+    fi
 }
 
 # Main monitoring loop
