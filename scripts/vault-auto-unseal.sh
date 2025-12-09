@@ -223,18 +223,18 @@ store_keys_keyring() {
         keyctl unlink "$old_key_id" @u 2>/dev/null || true
     fi
 
-    # Add new key directly to user keyring using keyctl add
+    # Add key directly to user keyring
     local new_key_id
-    new_key_id=$(keyctl add user "$key_name" "$combined_keys" @u 2>&1) || {
+    new_key_id=$(echo -n "$combined_keys" | keyctl padd user "$key_name" @u 2>&1) || {
         log_error "Failed to add key $key_name: $new_key_id"
         return 1
     }
 
-    # Set permissions to allow full access for possessor and user (0x3f3f0000)
-    # This allows the key to be readable when running as the same user (root)
-    keyctl setperm "$new_key_id" 0x3f3f0000 || {
-        log_warn "Failed to set key permissions, key might not be readable"
-    }
+    log_info "Created key with ID: $new_key_id"
+
+    # The issue: by default keys have permissions like "alswrv-----v"
+    # We need "alswrv--alswrv" but setperm doesn't work on some systems
+    # Workaround: keys are readable by root when accessed via keyctl read/print
 
     log_success "Keys stored in user keyring successfully (ID: $new_key_id)"
 }
@@ -243,6 +243,8 @@ store_keys_keyring() {
 retrieve_keys_keyring() {
     local key_name="${KEYRING_NAME}-keys"
     local key_id
+
+    # Search in user keyring
     key_id=$(keyctl search @u user "$key_name" 2>&1)
     local search_result=$?
 
@@ -254,14 +256,25 @@ retrieve_keys_keyring() {
 
     log_info "Found key ID: $key_id"
 
-    # Retrieve the combined keys
+    # Try multiple methods to read the key, in order of preference
     local combined_keys
-    combined_keys=$(keyctl pipe "$key_id" 2>&1)
-    local pipe_result=$?
+    local read_result=1
 
-    if [[ $pipe_result -ne 0 ]]; then
-        log_error "Failed to retrieve keys from keyring"
-        log_error "Keyctl error: $combined_keys"
+    # Method 1: Try keyctl read (works with possessor permissions)
+    if combined_keys=$(keyctl read "$key_id" 2>/dev/null); then
+        read_result=0
+        log_info "Retrieved keys using keyctl read"
+    # Method 2: Try keyctl print
+    elif combined_keys=$(keyctl print "$key_id" 2>/dev/null); then
+        read_result=0
+        log_info "Retrieved keys using keyctl print"
+    # Method 3: Try keyctl pipe
+    elif combined_keys=$(keyctl pipe "$key_id" 2>/dev/null); then
+        read_result=0
+        log_info "Retrieved keys using keyctl pipe"
+    else
+        log_error "Failed to retrieve keys from keyring using any method"
+        log_error "Try running: sudo keyctl describe $key_id"
         return 1
     fi
 
