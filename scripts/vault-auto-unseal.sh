@@ -485,11 +485,17 @@ unseal_vault() {
     for key in "${key_array[@]}"; do
         if [[ -n "$key" ]]; then
             log_info "Applying unseal key $(($unseal_count + 1))..."
-            if docker exec "$VAULT_CONTAINER" vault operator unseal "$key" > /dev/null 2>&1; then
+            local unseal_output
+            unseal_output=$(docker exec "$VAULT_CONTAINER" vault operator unseal "$key" 2>&1)
+            local unseal_result=$?
+
+            if [[ $unseal_result -eq 0 ]]; then
                 ((unseal_count++))
                 log_info "Successfully applied unseal key $unseal_count"
             else
                 log_error "Failed to apply unseal key $(($unseal_count + 1))"
+                log_error "Vault error: $unseal_output"
+                log_error "Key length: ${#key} characters"
                 return 1
             fi
         else
