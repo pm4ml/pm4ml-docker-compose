@@ -7,16 +7,18 @@ KEY_SOURCE="init-vault"  # Options: init-vault, interactive
 STORAGE_BACKEND="keyring"  # Options: keyring, tpm
 CHECK_INTERVAL=60
 MONITOR_ONLY=false
+CLEAR_KEYS=false
 VAULT_CONTAINER="vault"
 INIT_VAULT_CONTAINER="init-vault"
 
 # Storage paths
 KEYRING_NAME="vault-unseal"
-TPM_PRIMARY_CTX="/tmp/vault-primary.ctx"
-TPM_SEAL_PUB="/tmp/vault-seal.pub"
-TPM_SEAL_PRIV="/tmp/vault-seal.priv"
-TPM_SEALED_CTX="/tmp/vault-sealed.ctx"
-UNSEAL_KEY_FILE="/tmp/vault-unseal.key"
+TPM_STORAGE_DIR="/var/lib/vault-unseal"
+TPM_PRIMARY_CTX="${TPM_STORAGE_DIR}/vault-primary.ctx"
+TPM_SEAL_PUB="${TPM_STORAGE_DIR}/vault-seal.pub"
+TPM_SEAL_PRIV="${TPM_STORAGE_DIR}/vault-seal.priv"
+TPM_SEALED_CTX="${TPM_STORAGE_DIR}/vault-sealed.ctx"
+UNSEAL_KEY_FILE="/tmp/vault-unseal.key"  # This should be temporary as it contains plaintext keys
 
 # Colors for output
 RED='\033[0;31m'
@@ -38,6 +40,7 @@ Options:
     -i, --interval SECONDS       Check interval in seconds (default: 60)
     -m, --monitor-only           Only monitor seal status without unsealing
     -v, --vault-container NAME   Name of the vault container (default: vault)
+    -c, --clear-keys             Clear stored keys and exit
     -h, --help                   Show this help message
 
 Examples:
@@ -52,6 +55,12 @@ Examples:
 
     # Use TPM storage from init-vault container
     $0 -b tpm -s init-vault -i 120
+
+    # Clear stored keys from keyring
+    $0 --clear-keys
+
+    # Clear stored keys from TPM
+    $0 --clear-keys --storage-backend tpm
 
 EOF
     exit 0
@@ -80,6 +89,10 @@ parse_args() {
             -v|--vault-container)
                 VAULT_CONTAINER="$2"
                 shift 2
+                ;;
+            -c|--clear-keys)
+                CLEAR_KEYS=true
+                shift
                 ;;
             -h|--help)
                 usage
@@ -238,11 +251,44 @@ retrieve_keys_keyring() {
     echo "${keys[@]}"
 }
 
+# Clear keys from Linux keyring
+clear_keys_keyring() {
+    log_info "Clearing keys from Linux keyring..."
+
+    local cleared_count=0
+    for i in 1 2 3; do
+        local key_name="${KEYRING_NAME}-unseal-key-$i"
+        local key_id
+        if key_id=$(keyctl search @u user "$key_name" 2>/dev/null); then
+            keyctl revoke "$key_id" 2>/dev/null || true
+            keyctl unlink "$key_id" @u 2>/dev/null || true
+            log_info "Cleared key: $key_name"
+            ((cleared_count++))
+        fi
+    done
+
+    if [[ $cleared_count -eq 0 ]]; then
+        log_warn "No keys found to clear"
+    else
+        log_success "Cleared $cleared_count key(s) from keyring"
+    fi
+}
+
 # Store keys using TPM
 store_keys_tpm() {
     local keys=("$@")
 
     log_info "Storing keys in TPM..."
+
+    # Create TPM storage directory if it doesn't exist
+    if [[ ! -d "$TPM_STORAGE_DIR" ]]; then
+        sudo mkdir -p "$TPM_STORAGE_DIR" || {
+            log_error "Failed to create TPM storage directory: $TPM_STORAGE_DIR"
+            return 1
+        }
+        sudo chmod 700 "$TPM_STORAGE_DIR"
+        log_info "Created TPM storage directory: $TPM_STORAGE_DIR"
+    fi
 
     # Combine the three keys into a single file (newline separated)
     printf "%s\n" "${keys[@]}" > "$UNSEAL_KEY_FILE"
@@ -297,20 +343,55 @@ retrieve_keys_tpm() {
     echo "$unsealed_data" | tr '\n' ' ' | sed 's/ $//'
 }
 
+# Clear keys from TPM
+clear_keys_tpm() {
+    log_info "Clearing keys from TPM..."
+
+    local files_removed=0
+    local files=("$TPM_PRIMARY_CTX" "$TPM_SEAL_PUB" "$TPM_SEAL_PRIV" "$TPM_SEALED_CTX" "$UNSEAL_KEY_FILE")
+
+    for file in "${files[@]}"; do
+        if [[ -f "$file" ]]; then
+            sudo shred -u "$file" 2>/dev/null || sudo rm -f "$file"
+            log_info "Removed: $file"
+            ((files_removed++))
+        fi
+    done
+
+    # Remove the TPM storage directory if it's empty
+    if [[ -d "$TPM_STORAGE_DIR" ]]; then
+        if sudo rmdir "$TPM_STORAGE_DIR" 2>/dev/null; then
+            log_info "Removed empty TPM storage directory: $TPM_STORAGE_DIR"
+        fi
+    fi
+
+    if [[ $files_removed -eq 0 ]]; then
+        log_warn "No TPM key files found to clear"
+    else
+        log_success "Cleared $files_removed TPM key file(s)"
+    fi
+}
+
 # Initialize and store keys
 initialize_keys() {
-    local keys
+    local -a keys_array
 
     if [[ "$KEY_SOURCE" == "init-vault" ]]; then
-        keys=$(extract_keys_from_container) || return 1
+        local keys_string
+        keys_string=$(extract_keys_from_container) || return 1
+        # Convert space-separated string to array
+        read -ra keys_array <<< "$keys_string"
     else
-        keys=$(get_keys_interactive) || return 1
+        local keys_string
+        keys_string=$(get_keys_interactive) || return 1
+        # Convert space-separated string to array
+        read -ra keys_array <<< "$keys_string"
     fi
 
     if [[ "$STORAGE_BACKEND" == "keyring" ]]; then
-        store_keys_keyring $keys
+        store_keys_keyring "${keys_array[@]}"
     else
-        store_keys_tpm $keys
+        store_keys_tpm "${keys_array[@]}"
     fi
 }
 
@@ -322,22 +403,24 @@ get_seal_status() {
 
 # Unseal vault
 unseal_vault() {
-    local keys
-
     log_info "Retrieving unseal keys from $STORAGE_BACKEND..."
 
+    local keys_string
     if [[ "$STORAGE_BACKEND" == "keyring" ]]; then
-        keys=$(retrieve_keys_keyring) || return 1
+        keys_string=$(retrieve_keys_keyring) || return 1
     else
-        keys=$(retrieve_keys_tpm) || return 1
+        keys_string=$(retrieve_keys_tpm) || return 1
     fi
 
     log_info "Unsealing vault..."
 
-    local key_array=($keys)
+    # Convert space-separated string to array
+    local -a key_array
+    read -ra key_array <<< "$keys_string"
+
     for key in "${key_array[@]}"; do
         docker exec "$VAULT_CONTAINER" vault operator unseal "$key" > /dev/null 2>&1 || {
-            log_error "Failed to unseal vault"
+            log_error "Failed to unseal vault with key"
             return 1
         }
     done
@@ -378,6 +461,19 @@ monitor_vault() {
 # Main function
 main() {
     parse_args "$@"
+
+    # Handle clear-keys operation
+    if [[ "$CLEAR_KEYS" == "true" ]]; then
+        log_info "Vault Auto-Unseal Script - Clear Keys Mode"
+        log_info "Storage backend: $STORAGE_BACKEND"
+
+        if [[ "$STORAGE_BACKEND" == "keyring" ]]; then
+            clear_keys_keyring
+        else
+            clear_keys_tpm
+        fi
+        exit 0
+    fi
 
     log_info "Vault Auto-Unseal Script Starting..."
     log_info "Configuration: key-source=$KEY_SOURCE, storage=$STORAGE_BACKEND, interval=${CHECK_INTERVAL}s, monitor-only=$MONITOR_ONLY"
