@@ -13,11 +13,11 @@ INIT_VAULT_CONTAINER="init-vault"
 
 # Storage paths
 KEYRING_NAME="vault-unseal"
-TPM_STORAGE_DIR="/var/lib/vault-unseal"
-TPM_PRIMARY_CTX="${TPM_STORAGE_DIR}/vault-primary.ctx"
+TPM_STORAGE_DIR="."
+TPM_PRIMARY_CTX="/tmp/vault-primary.ctx"
 TPM_SEAL_PUB="${TPM_STORAGE_DIR}/vault-seal.pub"
 TPM_SEAL_PRIV="${TPM_STORAGE_DIR}/vault-seal.priv"
-TPM_SEALED_CTX="${TPM_STORAGE_DIR}/vault-sealed.ctx"
+TPM_SEALED_CTX="/tmp/vault-sealed.ctx"
 UNSEAL_KEY_FILE="/tmp/vault-unseal.key"  # This should be temporary as it contains plaintext keys
 
 # Colors for output
