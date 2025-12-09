@@ -340,8 +340,8 @@ store_keys_tpm() {
         # Write individual key to temp file
         printf "%s" "${keys[$i]}" > "$key_file"
 
-        # Seal this key
-        tpm_output=$(sudo tpm2_create -C "$TPM_PRIMARY_CTX" -i "$key_file" -u "$seal_pub" -r "$seal_priv" -a "fixedtpm|fixedparent" 2>&1) || {
+        # Seal this key without auth requirements
+        tpm_output=$(sudo tpm2_create -C "$TPM_PRIMARY_CTX" -i "$key_file" -u "$seal_pub" -r "$seal_priv" 2>&1) || {
             log_error "Failed to seal key $((i+1)) with TPM"
             log_error "TPM error: $tpm_output"
             shred -u "$key_file" 2>/dev/null || rm -f "$key_file"
