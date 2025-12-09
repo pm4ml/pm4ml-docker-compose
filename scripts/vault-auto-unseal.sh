@@ -322,11 +322,7 @@ store_keys_tpm() {
         log_info "Created TPM storage directory: $TPM_STORAGE_DIR"
     fi
 
-    # Combine the three keys into a single file with delimiter
-    # Use ||| as delimiter (same as keyring) to avoid newline issues with TPM
-    printf "%s|||%s|||%s" "${keys[0]}" "${keys[1]}" "${keys[2]}" > "$UNSEAL_KEY_FILE"
-
-    # Create primary key
+    # Create primary key once
     local tpm_output
     tpm_output=$(sudo tpm2_createprimary -C o -c "$TPM_PRIMARY_CTX" 2>&1) || {
         log_error "Failed to create TPM primary key"
@@ -334,52 +330,78 @@ store_keys_tpm() {
         return 1
     }
 
-    # Seal the unseal keys
-    # Add -a parameter to specify attributes for sealing data
-    tpm_output=$(sudo tpm2_create -C "$TPM_PRIMARY_CTX" -i "$UNSEAL_KEY_FILE" -u "$TPM_SEAL_PUB" -r "$TPM_SEAL_PRIV" -a "fixedtpm|fixedparent" 2>&1) || {
-        log_error "Failed to seal keys with TPM"
-        log_error "TPM error: $tpm_output"
-        log_info "File size: $(stat -c%s "$UNSEAL_KEY_FILE" 2>/dev/null || stat -f%z "$UNSEAL_KEY_FILE") bytes"
-        return 1
-    }
+    # Store each key separately to avoid TPM size limits (44 bytes each is well under limits)
+    for i in 0 1 2; do
+        local key_file="${TPM_STORAGE_DIR}/unseal-key-$((i+1)).tmp"
+        local seal_pub="${TPM_STORAGE_DIR}/seal-key-$((i+1)).pub"
+        local seal_priv="${TPM_STORAGE_DIR}/seal-key-$((i+1)).priv"
+        local sealed_ctx="${TPM_STORAGE_DIR}/sealed-key-$((i+1)).ctx"
 
-    # Load the sealed object
-    tpm_output=$(sudo tpm2_load -C "$TPM_PRIMARY_CTX" -u "$TPM_SEAL_PUB" -r "$TPM_SEAL_PRIV" -c "$TPM_SEALED_CTX" 2>&1) || {
-        log_error "Failed to load sealed keys"
-        log_error "TPM error: $tpm_output"
-        return 1
-    }
+        # Write individual key to temp file
+        printf "%s" "${keys[$i]}" > "$key_file"
 
-    # Clean up the plaintext key file
-    shred -u "$UNSEAL_KEY_FILE" 2>/dev/null || rm -f "$UNSEAL_KEY_FILE"
+        # Seal this key
+        tpm_output=$(sudo tpm2_create -C "$TPM_PRIMARY_CTX" -i "$key_file" -u "$seal_pub" -r "$seal_priv" -a "fixedtpm|fixedparent" 2>&1) || {
+            log_error "Failed to seal key $((i+1)) with TPM"
+            log_error "TPM error: $tpm_output"
+            shred -u "$key_file" 2>/dev/null || rm -f "$key_file"
+            return 1
+        }
+
+        # Load the sealed object
+        tpm_output=$(sudo tpm2_load -C "$TPM_PRIMARY_CTX" -u "$seal_pub" -r "$seal_priv" -c "$sealed_ctx" 2>&1) || {
+            log_error "Failed to load sealed key $((i+1))"
+            log_error "TPM error: $tpm_output"
+            shred -u "$key_file" 2>/dev/null || rm -f "$key_file"
+            return 1
+        }
+
+        # Securely delete temp file
+        shred -u "$key_file" 2>/dev/null || rm -f "$key_file"
+        log_info "Sealed key $((i+1)) in TPM"
+    done
 
     log_success "Keys stored in TPM successfully"
 }
 
 # Retrieve keys from TPM
 retrieve_keys_tpm() {
-    if [[ ! -f "$TPM_PRIMARY_CTX" ]] || [[ ! -f "$TPM_SEAL_PUB" ]] || [[ ! -f "$TPM_SEAL_PRIV" ]]; then
-        log_error "TPM key files not found. Please run key initialization first."
+    if [[ ! -f "$TPM_PRIMARY_CTX" ]]; then
+        log_error "TPM primary key not found. Please run key initialization first."
         return 1
     fi
 
-    # Load the sealed context if not already loaded
-    if [[ ! -f "$TPM_SEALED_CTX" ]]; then
-        sudo tpm2_load -C "$TPM_PRIMARY_CTX" -u "$TPM_SEAL_PUB" -r "$TPM_SEAL_PRIV" -c "$TPM_SEALED_CTX" > /dev/null 2>&1 || {
-            log_error "Failed to load sealed keys from TPM"
+    local keys=()
+    # Retrieve each key separately
+    for i in 1 2 3; do
+        local seal_pub="${TPM_STORAGE_DIR}/seal-key-${i}.pub"
+        local seal_priv="${TPM_STORAGE_DIR}/seal-key-${i}.priv"
+        local sealed_ctx="${TPM_STORAGE_DIR}/sealed-key-${i}.ctx"
+
+        if [[ ! -f "$seal_pub" ]] || [[ ! -f "$seal_priv" ]]; then
+            log_error "TPM key $i files not found"
+            return 1
+        fi
+
+        # Load the sealed context if needed
+        if [[ ! -f "$sealed_ctx" ]]; then
+            sudo tpm2_load -C "$TPM_PRIMARY_CTX" -u "$seal_pub" -r "$seal_priv" -c "$sealed_ctx" > /dev/null 2>&1 || {
+                log_error "Failed to load sealed key $i from TPM"
+                return 1
+            }
+        fi
+
+        # Unseal this key
+        local key
+        key=$(sudo tpm2_unseal -c "$sealed_ctx" 2>/dev/null) || {
+            log_error "Failed to unseal key $i from TPM"
             return 1
         }
-    fi
 
-    # Unseal and retrieve keys
-    local unsealed_data
-    unsealed_data=$(sudo tpm2_unseal -c "$TPM_SEALED_CTX" 2>/dev/null) || {
-        log_error "Failed to unseal keys from TPM"
-        return 1
-    }
+        keys+=("$key")
+    done
 
-    # Split by delimiter ||| and output space-separated (same as keyring)
-    echo "$unsealed_data" | sed 's/|||/ /g'
+    echo "${keys[@]}"
 }
 
 # Clear keys from TPM
@@ -387,14 +409,27 @@ clear_keys_tpm() {
     log_info "Clearing keys from TPM..."
 
     local files_removed=0
-    local files=("$TPM_PRIMARY_CTX" "$TPM_SEAL_PUB" "$TPM_SEAL_PRIV" "$TPM_SEALED_CTX" "$UNSEAL_KEY_FILE")
 
-    for file in "${files[@]}"; do
-        if [[ -f "$file" ]]; then
-            sudo shred -u "$file" 2>/dev/null || sudo rm -f "$file"
-            log_info "Removed: $file"
-            ((files_removed++))
-        fi
+    # Remove primary context
+    if [[ -f "$TPM_PRIMARY_CTX" ]]; then
+        sudo shred -u "$TPM_PRIMARY_CTX" 2>/dev/null || sudo rm -f "$TPM_PRIMARY_CTX"
+        log_info "Removed: $TPM_PRIMARY_CTX"
+        ((files_removed++))
+    fi
+
+    # Remove all individual key files
+    for i in 1 2 3; do
+        local seal_pub="${TPM_STORAGE_DIR}/seal-key-${i}.pub"
+        local seal_priv="${TPM_STORAGE_DIR}/seal-key-${i}.priv"
+        local sealed_ctx="${TPM_STORAGE_DIR}/sealed-key-${i}.ctx"
+        local key_temp="${TPM_STORAGE_DIR}/unseal-key-${i}.tmp"
+
+        for file in "$seal_pub" "$seal_priv" "$sealed_ctx" "$key_temp"; do
+            if [[ -f "$file" ]]; then
+                sudo shred -u "$file" 2>/dev/null || sudo rm -f "$file"
+                ((files_removed++))
+            fi
+        done
     done
 
     # Remove the TPM storage directory if it's empty
@@ -585,7 +620,14 @@ main() {
             # Check if the combined keys exist in user keyring
             keyctl search @u user "${KEYRING_NAME}-keys" &>/dev/null && keys_exist=true
         elif [[ "$STORAGE_BACKEND" == "tpm" ]]; then
-            [[ -f "$TPM_SEAL_PUB" ]] && [[ -f "$TPM_SEAL_PRIV" ]] && keys_exist=true
+            # Check if all three key pairs exist
+            [[ -f "${TPM_STORAGE_DIR}/seal-key-1.pub" ]] && \
+            [[ -f "${TPM_STORAGE_DIR}/seal-key-1.priv" ]] && \
+            [[ -f "${TPM_STORAGE_DIR}/seal-key-2.pub" ]] && \
+            [[ -f "${TPM_STORAGE_DIR}/seal-key-2.priv" ]] && \
+            [[ -f "${TPM_STORAGE_DIR}/seal-key-3.pub" ]] && \
+            [[ -f "${TPM_STORAGE_DIR}/seal-key-3.priv" ]] && \
+            keys_exist=true
         fi
 
         if [[ "$keys_exist" == "false" ]]; then
