@@ -230,12 +230,6 @@ store_keys_keyring() {
         return 1
     }
 
-    log_info "Created key with ID: $new_key_id"
-
-    # The issue: by default keys have permissions like "alswrv-----v"
-    # We need "alswrv--alswrv" but setperm doesn't work on some systems
-    # Workaround: keys are readable by root when accessed via keyctl read/print
-
     log_success "Keys stored in user keyring successfully (ID: $new_key_id)"
 }
 
@@ -254,29 +248,14 @@ retrieve_keys_keyring() {
         return 1
     fi
 
-    log_info "Found key ID: $key_id"
-
-    # Try multiple methods to read the key, in order of preference
+    # Retrieve the combined keys
     local combined_keys
-    local read_result=1
-
-    # Method 1: Try keyctl read (works with possessor permissions)
-    if combined_keys=$(keyctl read "$key_id" 2>/dev/null); then
-        read_result=0
-        log_info "Retrieved keys using keyctl read"
-    # Method 2: Try keyctl print
-    elif combined_keys=$(keyctl print "$key_id" 2>/dev/null); then
-        read_result=0
-        log_info "Retrieved keys using keyctl print"
-    # Method 3: Try keyctl pipe
-    elif combined_keys=$(keyctl pipe "$key_id" 2>/dev/null); then
-        read_result=0
-        log_info "Retrieved keys using keyctl pipe"
-    else
-        log_error "Failed to retrieve keys from keyring using any method"
-        log_error "Try running: sudo keyctl describe $key_id"
+    combined_keys=$(keyctl pipe "$key_id" 2>&1) || {
+        log_error "Failed to retrieve keys from keyring"
+        log_error "Note: Keyring storage requires running without sudo"
+        log_error "Add your user to docker group: sudo usermod -aG docker \$USER"
         return 1
-    fi
+    }
 
     # Check if we got data
     if [[ -z "$combined_keys" ]]; then
