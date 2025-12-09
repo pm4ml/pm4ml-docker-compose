@@ -212,10 +212,6 @@ store_keys_keyring() {
 
     local key_name="${KEYRING_NAME}-keys"
 
-    # Combine all three keys with newline separator
-    local combined_keys
-    combined_keys=$(printf "%s\n" "${keys[@]}")
-
     # Remove old key if exists
     local old_key_id
     if old_key_id=$(keyctl search @u user "$key_name" 2>/dev/null); then
@@ -223,9 +219,9 @@ store_keys_keyring() {
         keyctl unlink "$old_key_id" @u 2>/dev/null || true
     fi
 
-    # Add key directly to user keyring
+    # Add keys directly to user keyring - use printf to maintain exact format
     local new_key_id
-    new_key_id=$(echo -n "$combined_keys" | keyctl padd user "$key_name" @u 2>&1) || {
+    new_key_id=$(printf "%s\n%s\n%s" "${keys[0]}" "${keys[1]}" "${keys[2]}" | keyctl padd user "$key_name" @u 2>&1) || {
         log_error "Failed to add key $key_name: $new_key_id"
         return 1
     }
