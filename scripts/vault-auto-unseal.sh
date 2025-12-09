@@ -322,8 +322,9 @@ store_keys_tpm() {
         log_info "Created TPM storage directory: $TPM_STORAGE_DIR"
     fi
 
-    # Combine the three keys into a single file (newline separated, no trailing newline)
-    printf "%s\n%s\n%s" "${keys[0]}" "${keys[1]}" "${keys[2]}" > "$UNSEAL_KEY_FILE"
+    # Combine the three keys into a single file with delimiter
+    # Use ||| as delimiter (same as keyring) to avoid newline issues with TPM
+    printf "%s|||%s|||%s" "${keys[0]}" "${keys[1]}" "${keys[2]}" > "$UNSEAL_KEY_FILE"
 
     # Create primary key
     local tpm_output
@@ -375,8 +376,8 @@ retrieve_keys_tpm() {
         return 1
     }
 
-    # Convert newline-separated keys to space-separated array
-    echo "$unsealed_data" | tr '\n' ' ' | sed 's/ $//'
+    # Split by delimiter ||| and output space-separated (same as keyring)
+    echo "$unsealed_data" | sed 's/|||/ /g'
 }
 
 # Clear keys from TPM
