@@ -344,10 +344,10 @@ store_keys_tpm() {
 
     # Store each key separately to avoid TPM size limits (44 bytes each is well under limits)
     for i in 0 1 2; do
-        local key_file="${TPM_STORAGE_DIR}/unseal-key-$((i+1)).tmp"
+        local key_file="/tmp/unseal-key-$((i+1)).tmp"
         local seal_pub="${TPM_STORAGE_DIR}/seal-key-$((i+1)).pub"
         local seal_priv="${TPM_STORAGE_DIR}/seal-key-$((i+1)).priv"
-        local sealed_ctx="${TPM_STORAGE_DIR}/sealed-key-$((i+1)).ctx"
+        local sealed_ctx="/tmp/sealed-key-$((i+1)).ctx"  # Context files in /tmp (ephemeral)
 
         # Write individual key to temp file
         printf "%s" "${keys[$i]}" > "$key_file"
@@ -388,20 +388,18 @@ retrieve_keys_tpm() {
     for i in 1 2 3; do
         local seal_pub="${TPM_STORAGE_DIR}/seal-key-${i}.pub"
         local seal_priv="${TPM_STORAGE_DIR}/seal-key-${i}.priv"
-        local sealed_ctx="${TPM_STORAGE_DIR}/sealed-key-${i}.ctx"
+        local sealed_ctx="/tmp/sealed-key-${i}.ctx"  # Always use /tmp for context files
 
         if [[ ! -f "$seal_pub" ]] || [[ ! -f "$seal_priv" ]]; then
             log_error "TPM key $i files not found"
             return 1
         fi
 
-        # Load the sealed context if needed
-        if [[ ! -f "$sealed_ctx" ]]; then
-            sudo tpm2_load -C "$TPM_PRIMARY_CTX" -u "$seal_pub" -r "$seal_priv" -c "$sealed_ctx" > /dev/null 2>&1 || {
-                log_error "Failed to load sealed key $i from TPM"
-                return 1
-            }
-        fi
+        # Always load the sealed context fresh (regenerate .ctx from .pub/.priv)
+        sudo tpm2_load -C "$TPM_PRIMARY_CTX" -u "$seal_pub" -r "$seal_priv" -c "$sealed_ctx" > /dev/null 2>&1 || {
+            log_error "Failed to load sealed key $i from TPM"
+            return 1
+        }
 
         # Unseal this key
         local key
@@ -430,14 +428,13 @@ clear_keys_tpm() {
         ((files_removed++))
     fi
 
-    # Remove all individual key files
+    # Remove all individual key files (only pub/priv, ctx files are in /tmp)
     for i in 1 2 3; do
         local seal_pub="${TPM_STORAGE_DIR}/seal-key-${i}.pub"
         local seal_priv="${TPM_STORAGE_DIR}/seal-key-${i}.priv"
-        local sealed_ctx="${TPM_STORAGE_DIR}/sealed-key-${i}.ctx"
         local key_temp="${TPM_STORAGE_DIR}/unseal-key-${i}.tmp"
 
-        for file in "$seal_pub" "$seal_priv" "$sealed_ctx" "$key_temp"; do
+        for file in "$seal_pub" "$seal_priv" "$key_temp"; do
             if [[ -f "$file" ]]; then
                 sudo shred -u "$file" 2>/dev/null || sudo rm -f "$file"
                 ((files_removed++))
