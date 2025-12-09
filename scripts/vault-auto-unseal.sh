@@ -256,19 +256,35 @@ clear_keys_keyring() {
     log_info "Clearing keys from Linux keyring..."
 
     local cleared_count=0
-    for i in 1 2 3; do
-        local key_name="${KEYRING_NAME}-unseal-key-$i"
-        local key_id
-        if key_id=$(keyctl search @u user "$key_name" 2>/dev/null); then
+
+    # Get all key IDs that match the vault-unseal prefix
+    local key_ids
+    key_ids=$(keyctl list @u 2>/dev/null | grep -oE '[0-9]+' || true)
+
+    if [[ -z "$key_ids" ]]; then
+        log_warn "No keys found in user keyring"
+        return 0
+    fi
+
+    # Check each key and remove if it matches our pattern
+    for key_id in $key_ids; do
+        local key_desc
+        key_desc=$(keyctl describe "$key_id" 2>/dev/null || true)
+
+        # Check if this is a user key with vault-unseal prefix
+        if [[ "$key_desc" =~ user.*${KEYRING_NAME} ]]; then
+            local key_name
+            key_name=$(echo "$key_desc" | awk -F';' '{print $NF}')
+
             keyctl revoke "$key_id" 2>/dev/null || true
             keyctl unlink "$key_id" @u 2>/dev/null || true
-            log_info "Cleared key: $key_name"
+            log_info "Cleared key: $key_name (ID: $key_id)"
             ((cleared_count++))
         fi
     done
 
     if [[ $cleared_count -eq 0 ]]; then
-        log_warn "No keys found to clear"
+        log_warn "No vault-unseal keys found to clear"
     else
         log_success "Cleared $cleared_count key(s) from keyring"
     fi
