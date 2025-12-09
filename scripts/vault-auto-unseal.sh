@@ -416,27 +416,19 @@ retrieve_keys_tpm() {
 clear_keys_tpm() {
     log_info "Clearing keys from TPM..."
 
-    local files_removed=0
-
     # Remove primary context
     if [[ -f "$TPM_PRIMARY_CTX" ]]; then
         sudo shred -u "$TPM_PRIMARY_CTX" 2>/dev/null || sudo rm -f "$TPM_PRIMARY_CTX"
         log_info "Removed: $TPM_PRIMARY_CTX"
-        ((files_removed++))
     fi
 
     # Remove the TPM storage directory
     if [[ -d "$TPM_STORAGE_DIR" ]]; then
         sudo rm -rf "$TPM_STORAGE_DIR"
         log_info "Removed TPM storage directory: $TPM_STORAGE_DIR"
-        ((files_removed++))
     fi
 
-    if [[ $files_removed -eq 0 ]]; then
-        log_warn "No TPM key files found to clear"
-    else
-        log_success "Cleared TPM key file(s)"
-    fi
+    log_success "Cleared TPM key file(s)"
 }
 
 # Initialize and store keys
