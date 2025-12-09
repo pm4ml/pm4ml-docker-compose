@@ -412,8 +412,22 @@ initialize_keys() {
 
 # Get seal status of vault
 get_seal_status() {
-    docker exec "$VAULT_CONTAINER" vault status -format=json 2>/dev/null | \
-        python3 -c "import sys, json; print('true' if json.load(sys.stdin).get('sealed', True) else 'false')" 2>/dev/null || echo "error"
+    local status_output
+    status_output=$(docker exec "$VAULT_CONTAINER" vault status 2>&1)
+
+    if [[ $? -ne 0 ]] && [[ ! "$status_output" =~ "Sealed" ]]; then
+        echo "error"
+        return
+    fi
+
+    # Check if vault is sealed by looking for "Sealed" line
+    if echo "$status_output" | grep -q "Sealed.*true"; then
+        echo "true"
+    elif echo "$status_output" | grep -q "Sealed.*false"; then
+        echo "false"
+    else
+        echo "error"
+    fi
 }
 
 # Unseal vault
