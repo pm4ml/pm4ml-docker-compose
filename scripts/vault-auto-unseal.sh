@@ -188,8 +188,9 @@ get_keys_interactive() {
 
     local keys=()
     for i in 1 2 3; do
-        read -rsp "Unseal Key $i: " key
-        echo
+        echo -n "Unseal Key $i: " >&2
+        read -rs key
+        echo >&2
         if [[ -z "$key" ]]; then
             log_error "Key cannot be empty"
             return 1
