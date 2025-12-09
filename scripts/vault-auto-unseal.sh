@@ -197,37 +197,37 @@ store_keys_keyring() {
 
     log_info "Storing keys in Linux keyring..."
 
-    # Create a session keyring if it doesn't exist
-    local keyring_id
-    keyring_id=$(keyctl newring "$KEYRING_NAME" @u 2>/dev/null || keyctl search @u keyring "$KEYRING_NAME")
-
     for i in "${!keys[@]}"; do
-        local key_name="unseal-key-$((i+1))"
-        # Remove old key if exists
-        keyctl search "$keyring_id" user "$key_name" &>/dev/null && \
-            keyctl unlink "$(keyctl search "$keyring_id" user "$key_name")" "$keyring_id" 2>/dev/null || true
+        local key_name="${KEYRING_NAME}-unseal-key-$((i+1))"
 
-        # Add new key
-        echo -n "${keys[$i]}" | keyctl padd user "$key_name" "$keyring_id" > /dev/null
+        # Remove old key if exists
+        local old_key_id
+        if old_key_id=$(keyctl search @u user "$key_name" 2>/dev/null); then
+            keyctl revoke "$old_key_id" 2>/dev/null || true
+            keyctl unlink "$old_key_id" @u 2>/dev/null || true
+        fi
+
+        # Add new key directly to user keyring using keyctl add
+        local new_key_id
+        new_key_id=$(keyctl add user "$key_name" "${keys[$i]}" @u 2>&1) || {
+            log_error "Failed to add key $key_name: $new_key_id"
+            return 1
+        }
+
+        log_info "Stored key $key_name (ID: $new_key_id)"
     done
 
-    log_success "Keys stored in keyring successfully"
+    log_success "Keys stored in user keyring successfully"
 }
 
 # Retrieve keys from Linux keyring
 retrieve_keys_keyring() {
-    local keyring_id
-    keyring_id=$(keyctl search @u keyring "$KEYRING_NAME" 2>/dev/null) || {
-        log_error "Keyring '$KEYRING_NAME' not found"
-        return 1
-    }
-
     local keys=()
     for i in 1 2 3; do
-        local key_name="unseal-key-$i"
+        local key_name="${KEYRING_NAME}-unseal-key-$i"
         local key_id
-        key_id=$(keyctl search "$keyring_id" user "$key_name" 2>/dev/null) || {
-            log_error "Key '$key_name' not found in keyring"
+        key_id=$(keyctl search @u user "$key_name" 2>/dev/null) || {
+            log_error "Key '$key_name' not found in user keyring"
             return 1
         }
         local key
@@ -389,7 +389,11 @@ main() {
         # Check if keys already exist
         local keys_exist=false
         if [[ "$STORAGE_BACKEND" == "keyring" ]]; then
-            keyctl search @u keyring "$KEYRING_NAME" &>/dev/null && keys_exist=true
+            # Check if all three keys exist in user keyring
+            keyctl search @u user "${KEYRING_NAME}-unseal-key-1" &>/dev/null && \
+            keyctl search @u user "${KEYRING_NAME}-unseal-key-2" &>/dev/null && \
+            keyctl search @u user "${KEYRING_NAME}-unseal-key-3" &>/dev/null && \
+            keys_exist=true
         elif [[ "$STORAGE_BACKEND" == "tpm" ]]; then
             [[ -f "$TPM_SEAL_PUB" ]] && [[ -f "$TPM_SEAL_PRIV" ]] && keys_exist=true
         fi
