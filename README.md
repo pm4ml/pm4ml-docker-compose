@@ -71,7 +71,15 @@ It is designed for **DFSPs (Digital Financial Service Providers)** who need a si
    docker compose --profile vault up -d
    ```
 
-7. **Start Services**
+7. **Create Vault Secrets**
+
+   After starting the services, you need to create the necessary Vault secrets for the Payment Manager to function correctly. You can use the following command to create these secrets.
+
+   ```bash
+   docker compose exec vault-agent /vault/create-secrets.sh
+   ```
+
+8. **Start Services**
 
    _Note: Wait for Vault to initialize and render the secrets before starting other services._
 
@@ -84,13 +92,6 @@ It is designed for **DFSPs (Digital Financial Service Providers)** who need a si
    - `--profile admin` (for portainer service for debugging purposes)
    - `--profile ttk` (for testing toolkit for testing purposes)
 
-8. **Create Vault Secrets**
-
-   After starting the services, you need to create the necessary Vault secrets for the Payment Manager to function correctly. You can use the following command to create these secrets.
-
-   ```bash
-   docker compose exec vault-agent /vault/create-secrets.sh
-   ```
 
 ## Accessing Services
 
@@ -109,3 +110,17 @@ docker exec -it vault vault operator unseal
 
 ## Auto-unseal Vault
 Refer to [VAULT-AUTO-UNSEAL.md](./VAULT-AUTO-UNSEAL.md) for instructions on setting up auto-unseal for Vault using various methods.
+
+## Trouble Shooting
+
+### Error when using proxmox container templates
+If you are using proxmox container templates and getting the following error
+```
+Error response from daemon: failed to create task for container: failed to create shim task: OCI runtime create failed: runc create failed: unable to start container process: error during container init: open sysctl net.ipv4.ip_unprivileged_port_start file: reopen fd 8: permission denied
+```
+
+Set the following paramters in your LXC configuration of the container tempalte in proxmox host and restart the CT.
+```
+unprivileged: 0
+lxc.apparmor.profile: unconfined
+```
