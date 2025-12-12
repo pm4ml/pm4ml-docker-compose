@@ -165,7 +165,7 @@ services:
       - core-connector
 
   redis:
-    image: bitnami/redis:7.0.8-debian-11-r0
+    image: bitnamilegacy/redis:7.0.8-debian-11-r0
     environment:
       - ALLOW_EMPTY_PASSWORD=yes
       - REDIS_PORT=6379
