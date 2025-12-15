@@ -85,6 +85,22 @@ path "secrets/*"
   capabilities = ["create", "read", "update", "delete", "list", "sudo"]
 }
 
+# Allow access to shared-secrets (KV v2)
+path "shared-secrets/data/*"
+{
+  capabilities = ["create", "read", "update", "delete", "list"]
+}
+
+path "shared-secrets/metadata/*"
+{
+  capabilities = ["create", "read", "update", "delete", "list"]
+}
+
+path "shared-secrets/*"
+{
+  capabilities = ["create", "read", "update", "delete", "list", "sudo"]
+}
+
 path "kv/*"
 {
   capabilities = ["create", "read", "update", "delete", "list", "sudo"]
