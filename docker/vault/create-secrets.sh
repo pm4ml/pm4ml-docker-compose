@@ -55,17 +55,17 @@ if [ -z "$PORTAL_PASSWORD" ]; then
 fi
 
 echo ""
-echo "Creating secrets in Vault at secrets/pm4ml..."
+echo "Creating secrets in Vault at shared-secrets/pm4ml..."
 
 # Create secrets in vault (using KV v2 command)
-vault kv put secrets/pm4ml \
+vault kv put shared-secrets/pm4ml \
     AUTH_CLIENT_SECRET="$AUTH_CLIENT_SECRET" \
     PORTAL_PASSWORD="$PORTAL_PASSWORD"
 
 if [ $? -eq 0 ]; then
     echo "✓ Secrets successfully created in Vault"
     echo ""
-    echo "Secrets stored at: secrets/pm4ml"
+    echo "Secrets stored at: shared-secrets/pm4ml"
     echo "  - AUTH_CLIENT_SECRET: [SET]"
     echo "  - PORTAL_PASSWORD: [SET]"
 else

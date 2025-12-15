@@ -55,7 +55,8 @@ generate_secret_id() {
 
 populate_data() {
   vault secrets enable -path=pki pki
-  vault secrets enable -path=secrets kv-v2
+  vault secrets enable -path=secrets kv
+  vault secrets enable -path=shared-secrets kv-v2
   vault secrets tune -max-lease-ttl=97600h pki
   vault write -field=certificate pki/root/generate/internal \
           common_name="example.com" \
