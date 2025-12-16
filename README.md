@@ -73,11 +73,24 @@ It is designed for **DFSPs (Digital Financial Service Providers)** who need a si
 
 7. **Create Vault Secrets**
 
-   After starting the services, you need to create the necessary Vault secrets for the Payment Manager to function correctly. You can use the following command to create these secrets.
+   After starting the services, you need to create the necessary Vault secrets for the Payment Manager to function correctly. Use the following command to create secrets one at a time:
 
    ```bash
-   docker compose exec vault-agent /vault/create-secrets.sh
+   docker compose exec vault-agent /vault/create-secrets.sh <SECRET_NAME>
    ```
+
+   Required secrets:
+   ```bash
+   docker compose exec vault-agent /vault/create-secrets.sh AUTH_CLIENT_SECRET
+   docker compose exec vault-agent /vault/create-secrets.sh PORTAL_PASSWORD
+   ```
+
+   Additional secrets if needed based on the core-connector configuration:
+   ```bash
+   docker compose exec vault-agent /vault/create-secrets.sh CC_TOKEN
+   ```
+
+   The script will prompt you to enter the secret value. All secrets are stored at `shared-secrets/pm4ml` in Vault.
 
 8. **Start Services**
 

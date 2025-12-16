@@ -2,6 +2,43 @@
 
 set -e
 
+# Usage function
+usage() {
+    cat << EOF
+Vault Secrets Creator
+
+Usage: $0 <SECRET_NAME>
+
+Arguments:
+    SECRET_NAME    Name of the secret to create in Vault
+
+Examples:
+    $0 AUTH_CLIENT_SECRET
+    $0 PORTAL_PASSWORD
+    $0 CC_TOKEN
+
+The script will prompt for the secret value after you provide the name.
+Secrets are stored at: shared-secrets/pm4ml
+EOF
+    exit 1
+}
+
+# Check arguments
+if [ $# -ne 1 ]; then
+    echo "Error: SECRET_NAME argument is required"
+    echo ""
+    usage
+fi
+
+SECRET_NAME="$1"
+
+# Validate secret name (alphanumeric and underscores only)
+if ! echo "$SECRET_NAME" | grep -qE '^[A-Z_][A-Z0-9_]*$'; then
+    echo "Error: Invalid secret name. Use uppercase letters, numbers, and underscores only."
+    echo "Example: AUTH_CLIENT_SECRET, DATABASE_PASSWORD"
+    exit 1
+fi
+
 echo "=== Vault Secrets Creator ==="
 echo ""
 
@@ -38,38 +75,48 @@ else
     exit 1
 fi
 
-# Prompt for AUTH_CLIENT_SECRET
-echo "Enter AUTH_CLIENT_SECRET:"
-read -r AUTH_CLIENT_SECRET
-if [ -z "$AUTH_CLIENT_SECRET" ]; then
-    echo "Error: AUTH_CLIENT_SECRET cannot be empty"
-    exit 1
+# Get existing secrets first
+echo "Fetching existing secrets from shared-secrets/pm4ml..."
+if vault kv get -format=json shared-secrets/pm4ml > /tmp/existing-secrets.json 2>/dev/null; then
+    EXISTING_SECRETS="found"
+else
+    EXISTING_SECRETS="none"
 fi
 
-# Prompt for PORTAL_PASSWORD
-echo "Enter PORTAL_PASSWORD:"
-read -r PORTAL_PASSWORD
-if [ -z "$PORTAL_PASSWORD" ]; then
-    echo "Error: PORTAL_PASSWORD cannot be empty"
+if [ "$EXISTING_SECRETS" = "none" ]; then
+    echo "No existing secrets found. This will create a new secret store."
+else
+    echo "Existing secrets found. Will add/update: $SECRET_NAME"
+fi
+echo ""
+
+# Prompt for the secret value
+echo "Enter value for $SECRET_NAME:"
+read -r SECRET_VALUE
+if [ -z "$SECRET_VALUE" ]; then
+    echo "Error: Secret value cannot be empty"
     exit 1
 fi
 
 echo ""
-echo "Creating secrets in Vault at shared-secrets/pm4ml..."
+echo "Creating/updating secret '$SECRET_NAME' in Vault at shared-secrets/pm4ml..."
 
-# Create secrets in vault (using KV v2 command)
-vault kv put shared-secrets/pm4ml \
-    AUTH_CLIENT_SECRET="$AUTH_CLIENT_SECRET" \
-    PORTAL_PASSWORD="$PORTAL_PASSWORD"
+# Extract existing data and build the patch command
+if [ "$EXISTING_SECRETS" = "found" ]; then
+    # Use patch to preserve existing secrets
+    vault kv patch shared-secrets/pm4ml "$SECRET_NAME=$SECRET_VALUE"
+else
+    # Create new secret
+    vault kv put shared-secrets/pm4ml "$SECRET_NAME=$SECRET_VALUE"
+fi
 
 if [ $? -eq 0 ]; then
-    echo "✓ Secrets successfully created in Vault"
+    echo "✓ Secret '$SECRET_NAME' successfully created/updated in Vault"
     echo ""
-    echo "Secrets stored at: shared-secrets/pm4ml"
-    echo "  - AUTH_CLIENT_SECRET: [SET]"
-    echo "  - PORTAL_PASSWORD: [SET]"
+    echo "Secret stored at: shared-secrets/pm4ml"
+    echo "  - $SECRET_NAME: [SET]"
 else
-    echo "✗ Failed to create secrets"
+    echo "✗ Failed to create/update secret"
     exit 1
 fi
 

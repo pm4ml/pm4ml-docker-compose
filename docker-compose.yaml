@@ -144,6 +144,7 @@ services:
 
   core-connector:
     image: ${CORE_CONNECTOR_IMAGE:-mojaloop/ml-testing-toolkit}:${CORE_CONNECTOR_TAG:-v18.5.1}
+    entrypoint: ["/wait-for-secrets.sh"]
     env_file:
       - core-connector-config.env
     ports:
@@ -151,6 +152,8 @@ services:
       - "13004:3004"
     volumes:
       - ./docker/core-connector/:/opt/app/core-connector-config/
+      - ./docker/vault/wait-for-secrets.sh:/wait-for-secrets.sh:ro
+      - shared-secrets:/shared-secrets:ro
     environment:
       # SERVER CONFIGS
       - DFSP_SERVER_HOST=0.0.0.0
