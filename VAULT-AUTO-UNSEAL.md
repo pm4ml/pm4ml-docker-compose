@@ -2,6 +2,8 @@
 
 A bash script that automatically monitors and unseals HashiCorp Vault when it becomes sealed. Supports both Linux Keyring and TPM 2.0 for secure key storage.
 
+> **_Note: This script is intended to be used incase you are using a proper physical machine with TPM hardware or a proxmox VM with vTPM enabled. Or atleast a VM with linux keyring kernel capabilities. It doesn't work with any containers or proxmox container templates which shares the kernel with the host._**
+
 ## Features
 
 - 🔓 **Automatic Unsealing**: Continuously monitors Vault and unseals it when sealed

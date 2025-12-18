@@ -12,7 +12,7 @@ It is designed for **DFSPs (Digital Financial Service Providers)** who need a si
 
 ## Usage
 
-1. **DNS Configuration**
+### 1. DNS Configuration
 
    You need to set up DNS records for your domain to point to the server where you will run this stack. The following subdomains should be configured:
    - `portal.<YOUR_DOMAIN>` - for accessing the Payment Manager Portal
@@ -21,7 +21,7 @@ It is designed for **DFSPs (Digital Financial Service Providers)** who need a si
 
    It is recommended to use wildcard DNS records for easier management.
 
-2. **Firewall Configuration**
+### 2. Firewall Configuration
 
    Allow incoming traffic on the following ports:
    
@@ -33,7 +33,7 @@ It is designed for **DFSPs (Digital Financial Service Providers)** who need a si
    - `5050` & `6060` (TTK) - for accessing the TTK (can be restricted to user IPs)
 
 
-3. **Clone the Repository**
+### 3. Clone the Repository
 
    ```bash
    git clone https://github.com/pm4ml/pm4ml-docker-compose.git
@@ -42,11 +42,11 @@ It is designed for **DFSPs (Digital Financial Service Providers)** who need a si
    newgrp docker
    ```
 
-4. **Populate .env file**
+### 4. Populate .env file
 
    Create a copy of the `.env.example` file and rename it to `.env`. Update the environment variables in the `.env` file as needed.
 
-5. **SSL Certificate Setup (Required)**
+### 5. SSL Certificate Setup (Required)
     
     Before starting the services, generate SSL certificates for HAProxy
 
@@ -63,15 +63,25 @@ It is designed for **DFSPs (Digital Financial Service Providers)** who need a si
     ```
     This will obtain certificates for your domain and make it available for HAProxy
 
-6. **Start Vault**
-
-   _Note: Vault needs to be unsealed everytime it is started. You need to provide the unseal keys generated during the first initialization. So make sure to store them (unseal keys and root token) securely. You can find them in the logs of the `vault-init` container._
+### 6. Start Vault
 
    ```bash
    docker compose --profile vault up -d
    ```
 
-7. **Create Vault Secrets**
+### 7. Backup Vault Unseal keys and Root Token
+
+   > **_Note: Vault needs to be unsealed everytime it is started. You need to provide the unseal keys generated during the first initialization. So make sure to store them (unseal keys and root token) securely._**
+
+   - Wait for the `init-vault` container to complete initialization before proceeding.
+
+      ```bash
+      docker ps -a
+      docker logs init-vault
+      ```
+   - Find the unseal keys and root token in the logs of the `init-vault` container and store them securely.
+
+### 8. Create Vault Secrets
 
    After starting the services, you need to create the necessary Vault secrets for the Payment Manager to function correctly. Use the following command to create secrets one at a time:
 
@@ -92,7 +102,7 @@ It is designed for **DFSPs (Digital Financial Service Providers)** who need a si
 
    The script will prompt you to enter the secret value. All secrets are stored at `shared-secrets/pm4ml` in Vault.
 
-8. **Start Services**
+### 9. Start Services
 
    _Note: Wait for Vault to initialize and render the secrets before starting other services._
 
