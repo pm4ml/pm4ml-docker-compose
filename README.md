@@ -119,7 +119,7 @@ It is designed for **DFSPs (Digital Financial Service Providers)** who need a si
 ## Accessing Services
 
 - **Payment Manager Portal**: `https://portal.<YOUR_DOMAIN>`
-- **TTK UI**: `https://ttk.<YOUR_DOMAIN>:6060`
+- **TTK UI**: `http://ttk.<YOUR_DOMAIN>:6060`
 
 ## Unsealing Vault
 
