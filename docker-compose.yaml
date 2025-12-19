@@ -145,6 +145,9 @@ services:
   core-connector:
     image: ${CORE_CONNECTOR_IMAGE:-mojaloop/ml-testing-toolkit}:${CORE_CONNECTOR_TAG:-v18.5.1}
     entrypoint: ["/wait-for-secrets.sh"]
+    command:
+      - npm
+      - start
     env_file:
       - core-connector-config.env
     ports:
