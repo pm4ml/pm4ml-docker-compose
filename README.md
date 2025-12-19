@@ -92,6 +92,7 @@ It is designed for **DFSPs (Digital Financial Service Providers)** who need a si
    Required secrets:
    ```bash
    docker compose exec vault-agent /vault/create-secrets.sh AUTH_CLIENT_SECRET
+   docker compose exec vault-agent /vault/create-secrets.sh OAUTH_CLIENT_SECRET
    docker compose exec vault-agent /vault/create-secrets.sh PORTAL_PASSWORD
    ```
 
