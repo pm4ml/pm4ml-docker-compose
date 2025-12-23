@@ -183,7 +183,7 @@ services:
       - pm4ml
 
   sdk-scheme-adapter:
-    image: mojaloop/sdk-scheme-adapter:${SDK_IMAGE_TAG:-v24.18.0-snapshot.0}
+    image: mojaloop/sdk-scheme-adapter:${SDK_IMAGE_TAG:-v24.18.1}
     entrypoint: ["/wait-for-secrets.sh"]
     command:
       - sh
