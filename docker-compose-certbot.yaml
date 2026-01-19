@@ -46,18 +46,19 @@ services:
         while :; do
           certbot renew --quiet
           RENEWAL_EXIT=$?
-          if [ $RENEWAL_EXIT -eq 0 ]; then
-            CERT_PATH="/etc/letsencrypt/live/portal.${PM4ML_DOMAIN}"
-            if [ -f "$CERT_PATH/fullchain.pem" ] && [ -f "$CERT_PATH/privkey.pem" ]; then
-              cat "$CERT_PATH/fullchain.pem" "$CERT_PATH/privkey.pem" > /output/portal.pem
-              if [ $? -eq 0 ]; then
-                chmod 644 /output/portal.pem
-              else
-                echo "Error: Failed to combine certificates"
-              fi
+          if [ $RENEWAL_EXIT -ne 0 ]; then
+            echo "Warning: certbot renew exited with code $RENEWAL_EXIT"
+          fi
+          CERT_PATH="/etc/letsencrypt/live/portal.${PM4ML_DOMAIN}"
+          if [ -f "$CERT_PATH/fullchain.pem" ] && [ -f "$CERT_PATH/privkey.pem" ]; then
+            cat "$CERT_PATH/fullchain.pem" "$CERT_PATH/privkey.pem" > /output/portal.pem
+            if [ $? -eq 0 ]; then
+              chmod 644 /output/portal.pem
             else
-              echo "Error: Certificate files not found in $CERT_PATH"
+              echo "Error: Failed to combine certificates"
             fi
+          else
+            echo "Error: Certificate files not found in $CERT_PATH"
           fi
           sleep 12h & wait $${!}
         done
