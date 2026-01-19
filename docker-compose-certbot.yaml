@@ -58,6 +58,8 @@ services:
               echo "Error: Failed to combine certificates"
             fi
           else
+            echo "Error: Certificate renewal failed with exit code $RENEWAL_EXIT"
+          else
             echo "Error: Certificate files not found in $CERT_PATH"
           fi
           sleep 43200 & wait $${!}
