@@ -365,8 +365,8 @@ services:
 
           if ! kill -0 "$HAPROXY_PID" 2>/dev/null; then
             echo "HAProxy process exited"
-            wait "$HAPROXY_PID"
-            exit $?
+            wait "$HAPROXY_PID" 2>/dev/null || true
+            exit 1
           fi
 
           sleep 5
