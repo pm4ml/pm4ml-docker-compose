@@ -42,7 +42,7 @@ services:
     command:
       - -c
       - |
-        trap exit TERM
+        trap 'kill $! 2>/dev/null; exit' TERM
         while :; do
           certbot renew --quiet
           RENEWAL_EXIT=$?
