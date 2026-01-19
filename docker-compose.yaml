@@ -363,8 +363,9 @@ services:
             exit 1
           fi
 
-          sleep 5
+          sleep 30
         done
+
   # envoy-gateway:
   #   container_name: envoy-gateway
   #   image: envoyproxy/gateway:v1.5.0
