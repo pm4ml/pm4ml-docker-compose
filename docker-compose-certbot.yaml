@@ -60,7 +60,7 @@ services:
           else
             echo "Error: Certificate files not found in $CERT_PATH"
           fi
-          sleep 12h & wait $${!}
+          sleep 43200 & wait $${!}
         done
     depends_on:
       - cert-combiner
