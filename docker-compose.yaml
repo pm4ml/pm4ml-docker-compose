@@ -339,7 +339,7 @@ services:
           done
         }
 
-        haproxy -f /usr/local/etc/haproxy/haproxy.cfg &
+        docker-entrypoint.sh haproxy -f /usr/local/etc/haproxy/haproxy.cfg &
         HAPROXY_PID=$!
 
         # Allow HAProxy some time to fully initialize before starting the certificate monitor
