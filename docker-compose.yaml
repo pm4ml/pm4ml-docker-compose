@@ -332,18 +332,45 @@ services:
               :
             else
               echo "Failed to get modification time for $$CERT_FILE" >&2
-              sleep 60
-              continue
-            fi
-            if [ "$$CURRENT_MTIME" -gt "$$LAST_MTIME" ]; then
-              echo "Certificate updated, reloading HAProxy..."
-              kill -HUP 1
-              LAST_MTIME=$$CURRENT_MTIME
-            fi
-          fi
-          sleep 60
-        done & exec haproxy -f /usr/local/etc/haproxy/haproxy.cfg
 
+        monitor_certs() {
+          while true; do
+            if [ -f "$CERT_FILE" ]; then
+              CURRENT_MTIME=$(stat -c %Y "$CERT_FILE" 2>/dev/null || stat -f %m "$CERT_FILE")
+              if [ "$CURRENT_MTIME" -gt "$LAST_MTIME" ]; then
+                echo "Certificate updated, reloading HAProxy..."
+                kill -HUP "$HAPROXY_PID"
+                LAST_MTIME="$CURRENT_MTIME"
+              fi
+            fi
+            sleep 60
+          done
+        }
+
+        haproxy -f /usr/local/etc/haproxy/haproxy.cfg &
+        HAPROXY_PID=$!
+
+        monitor_certs &
+        MONITOR_PID=$!
+
+        trap 'echo "Stopping HAProxy and certificate monitor..."; kill "$HAPROXY_PID" "$MONITOR_PID" 2>/dev/null || true; wait "$HAPROXY_PID" 2>/dev/null; exit 0' INT TERM
+
+        while true; do
+          if ! kill -0 "$MONITOR_PID" 2>/dev/null; then
+            echo "Certificate monitor exited unexpectedly, stopping HAProxy"
+            kill "$HAPROXY_PID" 2>/dev/null || true
+            wait "$HAPROXY_PID" 2>/dev/null || true
+            exit 1
+          fi
+
+          if ! kill -0 "$HAPROXY_PID" 2>/dev/null; then
+            echo "HAProxy process exited"
+            wait "$HAPROXY_PID"
+            exit $?
+          fi
+
+          sleep 5
+        done
   # envoy-gateway:
   #   container_name: envoy-gateway
   #   image: envoyproxy/gateway:v1.5.0
