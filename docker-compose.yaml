@@ -342,6 +342,8 @@ services:
         haproxy -f /usr/local/etc/haproxy/haproxy.cfg &
         HAPROXY_PID=$!
 
+        # Allow HAProxy some time to fully initialize before starting the certificate monitor
+        sleep 5
         monitor_certs &
         MONITOR_PID=$!
 
