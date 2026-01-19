@@ -324,14 +324,6 @@ services:
       - |
         CERT_FILE="/etc/ssl/certs/portal.pem"
         LAST_MTIME=0
-        while true; do
-          if [ -f "$$CERT_FILE" ]; then
-            if CURRENT_MTIME=$$(stat -c %Y "$$CERT_FILE" 2>/dev/null); then
-              :
-            elif CURRENT_MTIME=$$(stat -f %m "$$CERT_FILE" 2>/dev/null); then
-              :
-            else
-              echo "Failed to get modification time for $$CERT_FILE" >&2
 
         monitor_certs() {
           while true; do
