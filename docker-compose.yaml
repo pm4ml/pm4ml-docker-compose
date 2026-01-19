@@ -353,7 +353,7 @@ services:
         monitor_certs &
         MONITOR_PID=$!
 
-        trap 'echo "Stopping HAProxy and certificate monitor..."; kill "$HAPROXY_PID" "$MONITOR_PID" 2>/dev/null || true; wait "$HAPROXY_PID" 2>/dev/null; exit 0' INT TERM
+        trap 'echo "Stopping HAProxy and certificate monitor..."; kill "$HAPROXY_PID" 2>/dev/null || true; kill "$MONITOR_PID" 2>/dev/null || true; wait "$HAPROXY_PID" 2>/dev/null || true; exit 0' INT TERM
 
         while true; do
           if ! kill -0 "$MONITOR_PID" 2>/dev/null; then
