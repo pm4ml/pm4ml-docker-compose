@@ -314,12 +314,27 @@ services:
       - frontend
       - experience-api
       - management-api
-      # - keycloak
-      # - ttk-frontend
       - prometheus
     restart: unless-stopped
     profiles:
       - pm4ml
+    entrypoint: /bin/sh
+    command:
+      - -c
+      - |
+        CERT_FILE="/etc/ssl/certs/portal.pem"
+        LAST_MTIME=0
+        while true; do
+          if [ -f "$$CERT_FILE" ]; then
+            CURRENT_MTIME=$$(stat -c %Y "$$CERT_FILE" 2>/dev/null || stat -f %m "$$CERT_FILE")
+            if [ "$$CURRENT_MTIME" -gt "$$LAST_MTIME" ]; then
+              echo "Certificate updated, reloading HAProxy..."
+              kill -HUP 1
+              LAST_MTIME=$$CURRENT_MTIME
+            fi
+          fi
+          sleep 60
+        done & exec haproxy -f /usr/local/etc/haproxy/haproxy.cfg
 
   # envoy-gateway:
   #   container_name: envoy-gateway

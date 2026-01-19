@@ -38,7 +38,6 @@ services:
     volumes:
       - ./docker/certbot/etc:/etc/letsencrypt
       - ./docker/certbot/certs:/output
-      - /var/run/docker.sock:/var/run/docker.sock
     entrypoint: /bin/sh
     command:
       - -c
@@ -46,11 +45,20 @@ services:
         trap exit TERM
         while :; do
           certbot renew --quiet
-          cat /etc/letsencrypt/live/portal.${PM4ML_DOMAIN}/fullchain.pem \
-            /etc/letsencrypt/live/portal.${PM4ML_DOMAIN}/privkey.pem \
-            > /output/portal.pem
-          chmod 644 /output/portal.pem
-          docker restart haproxy
+          RENEWAL_EXIT=$?
+          if [ $RENEWAL_EXIT -eq 0 ]; then
+            CERT_PATH="/etc/letsencrypt/live/portal.${PM4ML_DOMAIN}"
+            if [ -f "$CERT_PATH/fullchain.pem" ] && [ -f "$CERT_PATH/privkey.pem" ]; then
+              cat "$CERT_PATH/fullchain.pem" "$CERT_PATH/privkey.pem" > /output/portal.pem
+              if [ $? -eq 0 ]; then
+                chmod 644 /output/portal.pem
+              else
+                echo "Error: Failed to combine certificates"
+              fi
+            else
+              echo "Error: Certificate files not found in $CERT_PATH"
+            fi
+          fi
           sleep 12h & wait $${!}
         done
     depends_on:
