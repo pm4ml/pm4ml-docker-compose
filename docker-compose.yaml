@@ -326,7 +326,15 @@ services:
         LAST_MTIME=0
         while true; do
           if [ -f "$$CERT_FILE" ]; then
-            CURRENT_MTIME=$$(stat -c %Y "$$CERT_FILE" 2>/dev/null || stat -f %m "$$CERT_FILE")
+            if CURRENT_MTIME=$$(stat -c %Y "$$CERT_FILE" 2>/dev/null); then
+              :
+            elif CURRENT_MTIME=$$(stat -f %m "$$CERT_FILE" 2>/dev/null); then
+              :
+            else
+              echo "Failed to get modification time for $$CERT_FILE" >&2
+              sleep 60
+              continue
+            fi
             if [ "$$CURRENT_MTIME" -gt "$$LAST_MTIME" ]; then
               echo "Certificate updated, reloading HAProxy..."
               kill -HUP 1
