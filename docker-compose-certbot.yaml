@@ -60,7 +60,7 @@ services:
           else
             echo "Error: Certificate renewal failed with exit code $RENEWAL_EXIT"
           fi
-          sleep 43200 & wait $${!}
+          sleep 43200 & wait $$!
         done
     depends_on:
       - cert-combiner
