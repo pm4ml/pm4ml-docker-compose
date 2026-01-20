@@ -3,6 +3,8 @@ services:
     image: certbot/certbot
     ports:
       - "8888:80"
+    environment:
+      - PM4ML_DOMAIN=${PM4ML_DOMAIN}
     volumes:
       - ./docker/certbot/etc:/etc/letsencrypt
       - ./docker/certbot/certs:/output
@@ -10,27 +12,29 @@ services:
     command:
       - -c
       - |
-        trap 'kill $! 2>/dev/null; exit' TERM
+        trap 'kill $$! 2>/dev/null; exit' TERM
         while :; do
+          echo "Certbot renew check starting..."
           certbot renew --quiet
-          RENEWAL_EXIT=$?
-          if [ $RENEWAL_EXIT -ne 0 ]; then
-            echo "Warning: certbot renew exited with code $RENEWAL_EXIT"
+          RENEWAL_EXIT=$$?
+          if [ $$RENEWAL_EXIT -ne 0 ]; then
+            echo "Warning: certbot renew exited with code $$RENEWAL_EXIT"
           fi
-          CERT_PATH="/etc/letsencrypt/live/portal.${PM4ML_DOMAIN}"
-          if [ -f "$CERT_PATH/fullchain.pem" ] && [ -f "$CERT_PATH/privkey.pem" ]; then
-            cat "$CERT_PATH/fullchain.pem" "$CERT_PATH/privkey.pem" > /output/portal.pem
-            if [ $? -eq 0 ]; then
+          CERT_PATH="/etc/letsencrypt/live/portal.$${PM4ML_DOMAIN}"
+          echo "Using CERT_PATH=$$CERT_PATH"
+          if [ -f "$$CERT_PATH/fullchain.pem" ] && [ -f "$$CERT_PATH/privkey.pem" ]; then
+            cat "$$CERT_PATH/fullchain.pem" "$$CERT_PATH/privkey.pem" > /output/portal.pem
+            if [ $$? -eq 0 ]; then
               chmod 644 /output/portal.pem
             else
               echo "Error: Failed to combine certificates"
             fi
           else
-            echo "Error: Certificate files not found at $CERT_PATH"
-            echo "Debug - PM4ML_DOMAIN: $PM4ML_DOMAIN"
-            echo "Debug - CERT_PATH: $CERT_PATH"
-            echo "Debug - fullchain.pem exists: $([ -f "$CERT_PATH/fullchain.pem" ] && echo 'yes' || echo 'no')"
-            echo "Debug - privkey.pem exists: $([ -f "$CERT_PATH/privkey.pem" ] && echo 'yes' || echo 'no')"
+            echo "Error: Certificate files not found at $$CERT_PATH"
+            echo "Debug - PM4ML_DOMAIN: $${PM4ML_DOMAIN}"
+            echo "Debug - CERT_PATH: $$CERT_PATH"
+            echo "Debug - fullchain.pem exists: $$([ -f "$$CERT_PATH/fullchain.pem" ] && echo 'yes' || echo 'no')"
+            echo "Debug - privkey.pem exists: $$([ -f "$$CERT_PATH/privkey.pem" ] && echo 'yes' || echo 'no')"
           fi
           sleep 43200 & wait $$!
         done
