@@ -26,7 +26,11 @@ services:
               echo "Error: Failed to combine certificates"
             fi
           else
-            echo "Error: Certificate renewal failed with exit code $RENEWAL_EXIT"
+            echo "Error: Certificate files not found at $CERT_PATH"
+            echo "Debug - PM4ML_DOMAIN: $PM4ML_DOMAIN"
+            echo "Debug - CERT_PATH: $CERT_PATH"
+            echo "Debug - fullchain.pem exists: $([ -f "$CERT_PATH/fullchain.pem" ] && echo 'yes' || echo 'no')"
+            echo "Debug - privkey.pem exists: $([ -f "$CERT_PATH/privkey.pem" ] && echo 'yes' || echo 'no')"
           fi
           sleep 43200 & wait $$!
         done
