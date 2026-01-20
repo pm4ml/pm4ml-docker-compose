@@ -1,13 +1,12 @@
 services:
   certbot-renew:
     image: certbot/certbot
-    ports:
-      - "8888:80"
     environment:
       - PM4ML_DOMAIN=${PM4ML_DOMAIN}
     volumes:
       - ./docker/certbot/etc:/etc/letsencrypt
       - ./docker/certbot/certs:/output
+      - ./docker/certbot/webroot:/var/www/certbot
     entrypoint: /bin/sh
     command:
       - -c
@@ -15,7 +14,7 @@ services:
         trap 'kill $$! 2>/dev/null; exit' TERM
         while :; do
           echo "Certbot renew check starting..."
-          certbot renew --quiet
+          certbot renew --quiet --webroot --webroot-path=/var/www/certbot
           RENEWAL_EXIT=$$?
           if [ $$RENEWAL_EXIT -ne 0 ]; then
             echo "Warning: certbot renew exited with code $$RENEWAL_EXIT"
