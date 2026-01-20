@@ -1,0 +1,33 @@
+services:
+  certbot-renew:
+    image: certbot/certbot
+    ports:
+      - "8888:80"
+    volumes:
+      - ./docker/certbot/etc:/etc/letsencrypt
+      - ./docker/certbot/certs:/output
+    entrypoint: /bin/sh
+    command:
+      - -c
+      - |
+        trap 'kill $! 2>/dev/null; exit' TERM
+        while :; do
+          certbot renew --quiet
+          RENEWAL_EXIT=$?
+          if [ $RENEWAL_EXIT -ne 0 ]; then
+            echo "Warning: certbot renew exited with code $RENEWAL_EXIT"
+          fi
+          CERT_PATH="/etc/letsencrypt/live/portal.${PM4ML_DOMAIN}"
+          if [ -f "$CERT_PATH/fullchain.pem" ] && [ -f "$CERT_PATH/privkey.pem" ]; then
+            cat "$CERT_PATH/fullchain.pem" "$CERT_PATH/privkey.pem" > /output/portal.pem
+            if [ $? -eq 0 ]; then
+              chmod 644 /output/portal.pem
+            else
+              echo "Error: Failed to combine certificates"
+            fi
+          else
+            echo "Error: Certificate renewal failed with exit code $RENEWAL_EXIT"
+          fi
+          sleep 43200 & wait $$!
+        done
+    restart: unless-stopped
