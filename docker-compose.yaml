@@ -366,6 +366,14 @@ services:
           sleep 30
         done
 
+  certbot-webroot:
+    image: nginx:alpine
+    container_name: certbot-webroot
+    volumes:
+      - ./docker/certbot/webroot:/usr/share/nginx/html:ro
+    profiles:
+      - pm4ml
+
   # envoy-gateway:
   #   container_name: envoy-gateway
   #   image: envoyproxy/gateway:v1.5.0
