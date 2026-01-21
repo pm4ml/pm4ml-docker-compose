@@ -32,4 +32,3 @@ services:
         echo "Certificate combined successfully"
     depends_on:
       - certbot
-

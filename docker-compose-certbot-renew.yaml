@@ -1,0 +1,68 @@
+services:
+  certbot-renew:
+    image: certbot/certbot
+    environment:
+      - PM4ML_DOMAIN=${PM4ML_DOMAIN}
+    volumes:
+      - ./docker/certbot/etc:/etc/letsencrypt
+      - ./docker/certbot/certs:/output
+      - ./docker/certbot/webroot:/var/www/certbot
+    entrypoint: /bin/sh
+    command:
+      - -c
+      - |
+        trap 'kill $$! 2>/dev/null; exit' TERM
+        log() {
+          echo "[$$(date -u +'%Y-%m-%dT%H:%M:%SZ')] $$*"
+        }
+        while :; do
+          log "Certbot renew check starting..."
+          CERT_PATH="/etc/letsencrypt/live/portal.$${PM4ML_DOMAIN}"
+          CERT_FILE="$$CERT_PATH/fullchain.pem"
+          PRE_SERIAL=""
+          PRE_ENDDATE=""
+          if [ -f "$$CERT_FILE" ]; then
+            PRE_SERIAL=$$(openssl x509 -noout -serial -in "$$CERT_FILE" 2>/dev/null | cut -d= -f2)
+            PRE_ENDDATE=$$(openssl x509 -noout -enddate -in "$$CERT_FILE" 2>/dev/null | cut -d= -f2-)
+            log "Current cert serial=$$PRE_SERIAL"
+            log "Current cert notAfter=$$PRE_ENDDATE"
+          else
+            log "Current cert not found at $$CERT_FILE"
+          fi
+
+          certbot renew --quiet --webroot --webroot-path=/var/www/certbot
+          RENEWAL_EXIT=$$?
+          if [ $$RENEWAL_EXIT -ne 0 ]; then
+            log "Warning: certbot renew exited with code $$RENEWAL_EXIT"
+            log "Last letsencrypt log lines:"
+            tail -n 20 /var/log/letsencrypt/letsencrypt.log 2>/dev/null || true
+          else
+            log "certbot renew completed successfully"
+          fi
+          log "Using CERT_PATH=$$CERT_PATH"
+          if [ -f "$$CERT_PATH/fullchain.pem" ] && [ -f "$$CERT_PATH/privkey.pem" ]; then
+            POST_SERIAL=$$(openssl x509 -noout -serial -in "$$CERT_PATH/fullchain.pem" 2>/dev/null | cut -d= -f2)
+            POST_ENDDATE=$$(openssl x509 -noout -enddate -in "$$CERT_PATH/fullchain.pem" 2>/dev/null | cut -d= -f2-)
+            log "Post-renew cert serial=$$POST_SERIAL"
+            log "Post-renew cert notAfter=$$POST_ENDDATE"
+            if [ -n "$$PRE_SERIAL" ] && [ "$$PRE_SERIAL" != "$$POST_SERIAL" ]; then
+              log "Certificate renewed (serial changed)"
+            else
+              log "Certificate not renewed (serial unchanged)"
+            fi
+            cat "$$CERT_PATH/fullchain.pem" "$$CERT_PATH/privkey.pem" > /output/portal.pem
+            if [ $$? -eq 0 ]; then
+              chmod 644 /output/portal.pem
+            else
+              log "Error: Failed to combine certificates"
+            fi
+          else
+            log "Error: Certificate files not found at $$CERT_PATH"
+            log "Debug - PM4ML_DOMAIN: $${PM4ML_DOMAIN}"
+            log "Debug - CERT_PATH: $$CERT_PATH"
+            log "Debug - fullchain.pem exists: $$([ -f "$$CERT_PATH/fullchain.pem" ] && echo 'yes' || echo 'no')"
+            log "Debug - privkey.pem exists: $$([ -f "$$CERT_PATH/privkey.pem" ] && echo 'yes' || echo 'no')"
+          fi
+          sleep 43200 & wait $$!
+        done
+    restart: unless-stopped

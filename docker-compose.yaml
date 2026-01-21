@@ -314,10 +314,63 @@ services:
       - frontend
       - experience-api
       - management-api
-      # - keycloak
-      # - ttk-frontend
       - prometheus
     restart: unless-stopped
+    profiles:
+      - pm4ml
+    entrypoint: /bin/sh
+    command:
+      - -c
+      - |
+        CERT_FILE="/etc/ssl/certs/portal.pem"
+        LAST_MTIME=0
+
+        monitor_certs() {
+          while true; do
+            if [ -f "$CERT_FILE" ]; then
+              CURRENT_MTIME=$(stat -c %Y "$CERT_FILE" 2>/dev/null || echo 0)
+              if [ "$CURRENT_MTIME" -gt "$LAST_MTIME" ]; then
+                echo "Certificate updated, reloading HAProxy..."
+                kill -HUP "$HAPROXY_PID"
+                LAST_MTIME="$CURRENT_MTIME"
+              fi
+            fi
+            sleep 60
+          done
+        }
+
+        docker-entrypoint.sh haproxy -f /usr/local/etc/haproxy/haproxy.cfg &
+        HAPROXY_PID=$!
+
+        # Allow HAProxy some time to fully initialize before starting the certificate monitor
+        sleep "${HAPROXY_INIT_SLEEP:-5}"
+        monitor_certs &
+        MONITOR_PID=$!
+
+        trap 'echo "Stopping HAProxy and certificate monitor..."; kill "$HAPROXY_PID" 2>/dev/null || true; kill "$MONITOR_PID" 2>/dev/null || true; wait "$HAPROXY_PID" 2>/dev/null || true; exit 0' INT TERM
+
+        while true; do
+          if ! kill -0 "$MONITOR_PID" 2>/dev/null; then
+            echo "Certificate monitor exited unexpectedly, stopping HAProxy"
+            kill "$HAPROXY_PID" 2>/dev/null || true
+            wait "$HAPROXY_PID" 2>/dev/null || true
+            exit 1
+          fi
+
+          if ! kill -0 "$HAPROXY_PID" 2>/dev/null; then
+            echo "HAProxy process exited"
+            wait "$HAPROXY_PID" 2>/dev/null || true
+            exit 1
+          fi
+
+          sleep 30
+        done
+
+  certbot-webroot:
+    image: nginx:alpine
+    container_name: certbot-webroot
+    volumes:
+      - ./docker/certbot/webroot:/usr/share/nginx/html:ro
     profiles:
       - pm4ml
 
