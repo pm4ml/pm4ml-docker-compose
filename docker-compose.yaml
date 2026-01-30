@@ -315,6 +315,7 @@ services:
       - experience-api
       - management-api
       - prometheus
+      - certbot-webroot
     restart: unless-stopped
     profiles:
       - pm4ml
