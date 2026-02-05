@@ -183,7 +183,7 @@ services:
       - pm4ml
 
   sdk-scheme-adapter:
-    image: mojaloop/sdk-scheme-adapter:${SDK_IMAGE_TAG:-v24.19.1}
+    image: mojaloop/sdk-scheme-adapter:${SDK_IMAGE_TAG:-v24.19.2}
     entrypoint: ["/wait-for-secrets.sh"]
     command:
       - sh
@@ -315,6 +315,7 @@ services:
       - experience-api
       - management-api
       - prometheus
+      - certbot-webroot
     restart: unless-stopped
     profiles:
       - pm4ml
