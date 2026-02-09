@@ -124,12 +124,16 @@ It is designed for **DFSPs (Digital Financial Service Providers)** who need a si
 
 ## Unsealing Vault
 
-To unseal Vault, you need to access the Vault UI on port `8200` or use the Vault CLI. Use three of the unseal keys generated during the initialization process.
+To unseal Vault, you need to access the Vault UI on port `8200` or use the Vault CLI. Use THREE of the unseal keys generated during the initialization process.
 
 You need to run the unseal command three times with different unseal keys:
 
 ```bash
 docker exec -it vault vault operator unseal
+```
+After properly unsealead you can confirm by running the following command
+```
+curl -s http://127.0.0.1:8233/v1/sys/health
 ```
 
 ## Auto-unseal Vault
@@ -137,7 +141,7 @@ Refer to [VAULT-AUTO-UNSEAL.md](./VAULT-AUTO-UNSEAL.md) for instructions on sett
 
 ## Trouble Shooting
 
-### Error when using proxmox container templates
+### A. Error when using proxmox container templates
 If you are using proxmox container templates and getting the following error
 ```
 Error response from daemon: failed to create task for container: failed to create shim task: OCI runtime create failed: runc create failed: unable to start container process: error during container init: open sysctl net.ipv4.ip_unprivileged_port_start file: reopen fd 8: permission denied
@@ -147,4 +151,9 @@ Set the following paramters in your LXC configuration of the container tempalte 
 ```
 unprivileged: 0
 lxc.apparmor.profile: unconfined
+```
+### B. Get latest vault unseal key
+If you for unfortunate reason restart vault unexpectedly without noticing you can get the latest unseal key by running the following command
+```
+docker logs init-vault 2>&1 | grep -E '^(Unseal Key [1-5]:|Initial Root Token:)'
 ```
