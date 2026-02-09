@@ -20,6 +20,7 @@ services:
       - KEYCLOAK_IMPORT=/tmp/pm4ml-realm.json
       - DB_VENDOR=h2
       - PORTAL_USER=${PORTAL_USER:-test}
+      - JAVA_OPTS_APPEND=-Dkeycloak.profile.feature.email=disabled
     volumes:
       - ./docker/keycloak/keycloak-realm.json:/tmp/pm4ml-realm.json.template
       - ./docker/keycloak/replace-portal-user.sh:/usr/local/bin/replace-portal-user.sh
