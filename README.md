@@ -116,6 +116,12 @@ It is designed for **DFSPs (Digital Financial Service Providers)** who need a si
    - `--profile admin` (for portainer service for debugging purposes)
    - `--profile ttk` (for testing toolkit for testing purposes)
 
+Optional: Scale SDK replicas
+
+By default, the SDK runs as a single replica.
+For higher availability and load distribution, you can scale the SDK to multiple replicas.
+Example: Run with 3 SDK replicas:
+   - ` --scale sdk-scheme-adapter=3` (for testing toolkit for testing purposes)
 
 ## Accessing Services
 
